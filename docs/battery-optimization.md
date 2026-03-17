@@ -1,6 +1,6 @@
-# Battery Optimization — Keeping Tasker Alive in the Background
+# Battery Optimization — Keeping BudBridge Alive in the Background
 
-Modern Android aggressively kills background apps to save battery. For BudBridge to work, Tasker **must** be able to run its HTTP server continuously. This guide explains how to disable battery restrictions for Tasker on every major Android OEM.
+Modern Android aggressively kills background apps to save battery. For BudBridge to work, the **BudBridge app must be able to run its HTTP server continuously**. This guide explains how to disable battery restrictions for BudBridge on every major Android OEM.
 
 > **Also see:** [Don't Kill My App](https://dontkillmyapp.com/) — a comprehensive database of OEM-specific background restrictions and how to disable them.
 
@@ -8,12 +8,12 @@ Modern Android aggressively kills background apps to save battery. For BudBridge
 
 ## Why This Matters
 
-If Tasker is battery-optimized, Android will:
-- Kill the Tasker process after ~5–15 minutes of screen-off time
+If BudBridge is battery-optimized, Android will:
+- Kill the BudBridge process after ~5–15 minutes of screen-off time
 - Stop the HTTP server from responding
 - Cause BudBridge on PC to report "Could not reach phone"
 
-The fix is always the same concept: tell the system Tasker is **unrestricted** or **not optimizable**.
+The fix is always the same concept: tell the system BudBridge is **unrestricted** or **not optimizable**.
 
 ---
 
@@ -26,7 +26,7 @@ Stock Android follows the standard `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` patter
 1. Open **Settings**
 2. Tap **Apps**
 3. Tap **See all apps**
-4. Scroll to and tap **Tasker**
+4. Scroll to and tap **BudBridge**
 5. Tap **Battery**
 6. Select **Unrestricted**
    > "Allow battery use in background without restrictions"
@@ -34,7 +34,7 @@ Stock Android follows the standard `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` patter
 **Additionally (Pixel 6+):**
 
 1. Open **Settings → Battery → Battery Saver**
-2. Ensure Adaptive Battery is not restricting Tasker:
+2. Ensure Adaptive Battery is not restricting BudBridge:
    - **Settings → Battery → Adaptive Battery** → OFF (optional, system-wide)
 
 ---
@@ -50,18 +50,18 @@ Samsung has multiple layers of battery management: the standard Android restrict
 3. Tap the three-dot menu → **Special access**
 4. Tap **Optimize battery usage**
 5. In the dropdown, switch from "Apps not optimized" to **All**
-6. Find **Tasker** and toggle it **OFF** (not optimized)
+6. Find **BudBridge** and toggle it **OFF** (not optimized)
 
 ### Step 2: Remove from Sleeping Apps
 
 1. Open **Settings → Battery and device care → Battery**
 2. Tap **Background usage limits**
 3. Check **Sleeping apps** and **Deep sleeping apps**
-4. If Tasker appears in either list, swipe it left to remove it
+4. If BudBridge appears in either list, swipe it left to remove it
 
 ### Step 3: Allow Background Activity
 
-1. Open **Settings → Apps → Tasker**
+1. Open **Settings → Apps → BudBridge**
 2. Tap **Battery**
 3. Select **Unrestricted**
 
@@ -84,25 +84,25 @@ OnePlus uses aggressive background management through "Battery Optimization" and
 1. Open **Settings**
 2. Tap **Battery** → **Battery optimization**
 3. Tap the dropdown → **All apps**
-4. Find and tap **Tasker**
+4. Find and tap **BudBridge**
 5. Select **Don't optimize** → **Done**
 
 ### Step 2: Allow Auto-launch
 
 1. Open **Settings → Apps → App management**
-2. Tap **Tasker**
+2. Tap **BudBridge**
 3. Tap **Auto launch** → Enable **Allow auto launch**
 
 ### Step 3: Allow Background Activity
 
-1. In **Settings → Apps → Tasker → Battery**
+1. In **Settings → Apps → BudBridge → Battery**
 2. Enable **Allow background activity**
 
 ### Step 4: Advanced Optimization (OxygenOS 13+)
 
 1. **Settings → Battery → More settings → Battery optimization**
-2. Find Tasker → **Don't optimize**
-3. Also check: **Settings → Privacy → Permission manager** → verify Tasker has needed permissions
+2. Find BudBridge → **Don't optimize**
+3. Also check: **Settings → Privacy → Permission manager** → verify BudBridge has needed permissions
 
 ---
 
@@ -115,26 +115,26 @@ Xiaomi/MIUI is notorious for killing background apps. Multiple steps are require
 1. Open **Settings**
 2. Tap **Apps**
 3. Tap **Manage apps**
-4. Find and tap **Tasker**
+4. Find and tap **BudBridge**
 5. Tap **Battery saver**
 6. Select **No restrictions**
 
 ### Step 2: Autostart
 
-1. Open **Settings → Apps → Manage apps → Tasker**
+1. Open **Settings → Apps → Manage apps → BudBridge**
 2. Tap **Autostart** → Enable it (toggle ON)
 
 ### Step 3: Battery Optimization (Android-level)
 
 1. Open **Settings → Battery & performance**
 2. Tap **Choose apps** (or scroll to "Battery optimization")
-3. Find Tasker → set to **No restrictions**
+3. Find BudBridge → set to **No restrictions**
 
-### Step 4: MIUI App Lock (prevent being killed by memory cleaner)
+### Step 4: App Lock (prevent being killed by memory cleaner)
 
 1. Open the **Recent Apps** screen (square button or swipe up and hold)
-2. Find Tasker
-3. **Long-press** the Tasker card
+2. Find BudBridge
+3. **Long-press** the BudBridge card
 4. Tap the **lock icon** (🔒) to lock it in memory
 
 ### Step 5: Disable MIUI Optimization (developer option — last resort)
@@ -144,7 +144,7 @@ Xiaomi/MIUI is notorious for killing background apps. Multiple steps are require
 3. Scroll down and toggle **MIUI Optimization** → OFF
 4. Reboot
 
-> **HyperOS (MIUI 15+):** Steps are similar. Look under **Settings → Apps → Tasker → Battery usage** and set to **Unrestricted**.
+> **HyperOS (MIUI 15+):** Steps are similar. Look under **Settings → Apps → BudBridge → Battery usage** and set to **Unrestricted**.
 
 ---
 
@@ -157,23 +157,23 @@ ColorOS has its own layer of process management on top of Android's.
 1. Open **Settings**
 2. Tap **Battery** → **Battery optimization**
 3. Tap the dropdown → **All apps**
-4. Find and tap **Tasker**
+4. Find and tap **BudBridge**
 5. Select **Don't optimize**
 
 ### Step 2: Auto-launch / Freeze on Close
 
-1. Open **Settings → Apps → App management → Tasker**
+1. Open **Settings → Apps → App management → BudBridge**
 2. Look for **Freeze app when closed** or **Auto-launch** → Disable freezing, Enable auto-launch
 
 ### Step 3: High Background Activity
 
 1. **Settings → Battery → More settings**
-2. Find **Tasker** → Allow **High background activity**
+2. Find **BudBridge** → Allow **High background activity**
 
 ### Step 4: Allow Startup (ColorOS 14+)
 
 1. **Settings → Privacy → Special app access → Autostart**
-2. Enable Tasker
+2. Enable BudBridge
 
 ---
 
@@ -185,58 +185,58 @@ Huawei's power management is extremely aggressive, especially on EMUI 9+ and Har
 
 1. Open **Settings**
 2. Tap **Apps & notifications** → **App launch**
-3. Find **Tasker**
+3. Find **BudBridge**
 4. Toggle it from "Automatic" to **Manual**
 5. In the popup, enable all three:
    - **Auto-launch**
-   - **Secondary launch** (allow other apps to start Tasker)
+   - **Secondary launch** (allow other apps to start BudBridge)
    - **Run in background**
 
 ### Step 2: Battery Optimization
 
 1. Open **Settings → Battery → App battery usage**
    (or **Settings → Battery → Launch apps**)
-2. Find Tasker
+2. Find BudBridge
 3. Set to **Don't optimize** or disable all restrictions
 
 ### Step 3: Disable Power-intensive App Prompt
 
 1. **Settings → Battery**
 2. Tap **Power-intensive apps** (or "High power consumption")
-3. If Tasker is listed, remove it from the list
+3. If BudBridge is listed, remove it from the list
 
 ### Step 4: Background App Refresh
 
-1. **Settings → Apps → Tasker → Battery**
+1. **Settings → Apps → BudBridge → Battery**
 2. Enable **Run in background**
 3. Set **Background activity** to **Unrestricted**
 
-> **Note:** On HarmonyOS 4+, the path may be **Settings → Apps → Tasker → Battery usage** → **Unrestricted**.
+> **Note:** On HarmonyOS 4+, the path may be **Settings → Apps → BudBridge → Battery usage** → **Unrestricted**.
 
 ---
 
 ## Sony Xperia
 
-Sony's STAMINA mode and Adaptive Battery can interrupt Tasker.
+Sony's STAMINA mode and Adaptive Battery can interrupt BudBridge.
 
 ### Step 1: STAMINA Mode Exception
 
 1. Open **Settings**
 2. Tap **Battery**
 3. Tap **STAMINA mode** → tap **Exceptions**
-4. Add **Tasker** to the exceptions list
+4. Add **BudBridge** to the exceptions list
 
 ### Step 2: Standard Battery Optimization
 
 1. **Settings → Battery → Battery optimization**
 2. Switch to **All apps**
-3. Find Tasker → **Don't optimize**
+3. Find BudBridge → **Don't optimize**
 
 ### Step 3: Background Data
 
 1. **Settings → Network & internet → Data usage**
 2. Tap **Data saver** (if enabled)
-3. Add Tasker to **Unrestricted apps**
+3. Add BudBridge to **Unrestricted apps**
 
 ---
 
@@ -249,43 +249,42 @@ Motorola is generally close to stock Android but has some extras.
 1. Open **Settings**
 2. Tap **Battery** → **Battery optimization**
 3. Tap dropdown → **All apps**
-4. Find and tap **Tasker**
+4. Find and tap **BudBridge**
 5. Select **Don't optimize**
 
-### Step 2: Moto Actions Background
+### Step 2: Background Activity
 
-1. **Settings → Apps → Tasker → Battery**
+1. **Settings → Apps → BudBridge → Battery**
 2. Set to **Unrestricted**
 
 ### Step 3: Adaptive Battery
 
 1. **Settings → Battery → Adaptive Battery**
-2. Ensure Tasker is not listed as a restricted app
+2. Ensure BudBridge is not listed as a restricted app
 3. Optionally disable Adaptive Battery system-wide
 
 ---
 
-## Universal Fallback: Android Accessibility & Notification Access
+## Universal Fallback: Special App Permissions
 
-Some Tasker features (and keeping it alive) benefit from these permissions:
+Some features and background stability benefit from these additional permissions:
 
-1. **Settings → Accessibility → Tasker** → Enable
-2. **Settings → Apps → Special app access → Notification access → Tasker** → Enable
-3. **Settings → Apps → Special app access → Device admin apps → Tasker** → Enable (if prompted)
+1. **Settings → Accessibility → BudBridge** → Enable
+2. **Settings → Apps → Special app access → Notification access → BudBridge** → Enable
 
 ---
 
-## Verifying Tasker Stays Alive
+## Verifying BudBridge Stays Alive
 
 After configuring battery settings:
 
-1. Start the **BB HTTP Server** profile in Tasker
+1. Open BudBridge on your phone and confirm the service is running (status indicator in the app)
 2. Lock your phone screen and wait 5–10 minutes
 3. From your PC, run:
    ```bash
    curl http://<phone-ip>:8521/ping
    ```
-4. If you get a response, Tasker is alive in the background
+4. If you get `{"alive": true, ...}`, BudBridge is alive in the background
 5. If not, try the steps for your OEM again, or check dontkillmyapp.com
 
 ---
@@ -294,7 +293,5 @@ After configuring battery settings:
 
 - **Don't Kill My App:** https://dontkillmyapp.com/
   The most comprehensive guide to per-OEM background restrictions, updated regularly.
-
-- **Tasker FAQ:** https://tasker.joaoapps.com/faq.html
 
 - **BudBridge Troubleshooting:** [troubleshooting.md](troubleshooting.md)

@@ -39,7 +39,7 @@ Or you walk back to your desk, open Windows Bluetooth settings, find your headph
 │  │      Windows PC          │     │       Android Phone        │ │
 │  │                          │     │                            │ │
 │  │  ┌───────────────────┐  │     │  ┌──────────────────────┐  │ │
-│  │  │   BudBridge.exe   │  │     │  │   Tasker             │  │ │
+│  │  │   BudBridge.exe   │  │     │  │   BudBridge App      │  │ │
 │  │  │                   │  │     │  │                       │  │ │
 │  │  │  ┌─────────────┐  │  │ HTTP│  │  HTTP Server :8521   │  │ │
 │  │  │  │ HTTP :8522  │◄─┼──┼─────┼──┤  BB Handle Request   │  │ │
@@ -62,17 +62,17 @@ Or you walk back to your desk, open Windows Bluetooth settings, find your headph
 
 Flow: Claim to PC
   PC hotkey pressed
-      → BudBridge POSTs /release to phone (Tasker)
-      → Tasker disconnects BT on phone
+      → BudBridge POSTs /release to phone (BudBridge app)
+      → BudBridge app disconnects BT on phone
       → BudBridge waits handoff_delay_ms
       → BudBridge connects BT on PC
 
 Flow: Claim to Phone
   Phone widget tapped
-      → Tasker POSTs /release to PC (BudBridge server)
+      → BudBridge app POSTs /release to PC (BudBridge server)
       → BudBridge disconnects BT on PC
-      → Tasker waits 3 s
-      → Tasker connects BT on phone
+      → BudBridge app waits 3 s
+      → BudBridge app connects BT on phone
 ```
 
 ---
@@ -162,7 +162,7 @@ budbridge  # runs BudBridge
 
    [network]
    phone_ip = "192.168.1.42"            # your phone's local IP
-   phone_port = 8521                    # Tasker HTTP server port
+   phone_port = 8521                    # BudBridge Android app HTTP server port
    pc_port = 8522                       # BudBridge HTTP server port
    ```
 
@@ -176,7 +176,7 @@ budbridge  # runs BudBridge
 
 ### Phone Side
 
-1. Build and install the app from the `android/` directory using Android Studio, or sideload the APK from the Releases page.
+1. Build and install the app from the `android/` directory using Android Studio (open the `android/` folder, let it sync, then **Build → Build APK(s)**), or sideload the APK from the Releases page.
 2. Open BudBridge on your phone and tap **Settings**.
 3. Enter your PC's IP address and the shared secret (if configured).
 4. Tap **Test Connection** to verify it can reach the PC.
@@ -201,7 +201,7 @@ All settings live in `~/.budbridge/config.toml`.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `phone_ip` | string | `"192.168.1.42"` | Phone's local IP address on your network |
-| `phone_port` | int | `8521` | Port Tasker's HTTP server listens on |
+| `phone_port` | int | `8521` | Port the BudBridge Android app's HTTP server listens on |
 | `pc_port` | int | `8522` | Port BudBridge's HTTP server listens on |
 | `shared_secret` | string | `""` | If set, all requests must include `X-BudBridge-Token: <secret>` header |
 
@@ -234,7 +234,7 @@ All settings live in `~/.budbridge/config.toml`.
 
 ## HTTP API
 
-Both BudBridge (PC) and Tasker (phone) expose a small HTTP API. All responses are JSON.
+Both BudBridge (PC) and the BudBridge Android app (phone) expose a small HTTP API. All responses are JSON.
 
 ### PC Endpoints (port 8522)
 
@@ -248,7 +248,7 @@ Both BudBridge (PC) and Tasker (phone) expose a small HTTP API. All responses ar
 
 **Concurrency:** If a handoff is already in progress, `/release` returns `409 Conflict`.
 
-### Phone Endpoints (port 8521, Tasker)
+### Phone Endpoints (port 8521, BudBridge Android app)
 
 | Method | Path | Description | Response |
 |--------|------|-------------|----------|
@@ -281,7 +281,7 @@ Both BudBridge (PC) and Tasker (phone) expose a small HTTP API. All responses ar
 
 | Issue | Quick fix |
 |-------|-----------|
-| Tasker HTTP not responding | Disable battery optimization for Tasker |
+| BudBridge app not responding | Disable battery optimization for BudBridge — see [battery-optimization.md](docs/battery-optimization.md) |
 | BT won't connect after release | Increase `handoff_delay_ms` to 4000 |
 | "Device not found" in PowerShell | Check `bt_friendly_name` matches Windows exactly |
 | PC server unreachable from phone | Add Windows Firewall inbound rule for port 8522 |
@@ -330,7 +330,7 @@ BudBridge/
 │       └── Prefs.kt           # Shared preferences wrapper
 ├── docs/
 │   ├── troubleshooting.md     # Common issues and solutions
-│   └── battery-optimization.md # Per-OEM Tasker battery fix guide
+│   └── battery-optimization.md # Per-OEM battery optimization guide
 ├── LICENSE                    # MIT
 └── README.md                  # This file
 ```
@@ -385,7 +385,7 @@ pytest
 
 - macOS support (replacing PowerShell BT backend with `blueutil`)
 - iOS support (Shortcuts app integration)
-- Auto-discovery of phone IP via mDNS without Tasker
+- Auto-discovery of phone IP via mDNS
 - Bluetooth status polling improvements
 - Dark/light mode tray icons
 - GUI settings improvements
