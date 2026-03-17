@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue.svg)](https://www.microsoft.com/windows)
-[![Android: Tasker](https://img.shields.io/badge/android-Tasker-green.svg)](https://tasker.joaoapps.com/)
+[![Android: Native](https://img.shields.io/badge/android-Native%20App-green.svg)](https://developer.android.com/)
 
 **One-click Bluetooth handoff for your headphones between Android and Windows PC.**
 
@@ -82,15 +82,15 @@ Flow: Claim to Phone
 ### Requirements
 
 - **PC:** Windows 10/11, Python 3.11+
-- **Phone:** Android 8.0+, [Tasker](https://play.google.com/store/apps/details?id=net.dinglisch.android.taskerm) (~$3.49)
+- **Phone:** Android 8.0+
 - Both devices on the same Wi-Fi network
 
 ### 5-Minute Setup
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/yourusername/budbridge.git
-cd budbridge/pc
+git clone https://github.com/Eclectic-Wind/BudBridge.git
+cd BudBridge/pc
 
 # 2. Install dependencies
 pip install -r requirements.txt
@@ -104,7 +104,7 @@ The setup wizard will:
 2. Ask for your phone's IP address
 3. Save `~/.budbridge/config.toml`
 
-Then follow the [Tasker Setup Guide](android/tasker-setup.md) to configure your phone.
+Then install the BudBridge Android app (see [Android Setup](#phone-side)) to configure your phone.
 
 ---
 
@@ -176,15 +176,12 @@ budbridge  # runs BudBridge
 
 ### Phone Side
 
-Follow the complete [Tasker Setup Guide](android/tasker-setup.md).
-
-**Summary:**
-1. Install Tasker
-2. Import [BudBridge.prj.xml](android/BudBridge.prj.xml) (long-press Projects tab → Import)
-3. Set your variables: `%BB_PC_IP`, `%BB_BT_ADDRESS`, etc.
-4. Enable the **BB HTTP Server** profile
-5. [Disable battery optimization](docs/battery-optimization.md) for Tasker
-6. Add the **BB Claim to Phone** task as a home screen widget
+1. Build and install the app from the `android/` directory using Android Studio, or sideload the APK from the Releases page.
+2. Open BudBridge on your phone and tap **Settings**.
+3. Enter your PC's IP address and the shared secret (if configured).
+4. Tap **Test Connection** to verify it can reach the PC.
+5. [Disable battery optimization](docs/battery-optimization.md) for BudBridge so the HTTP server stays alive in the background.
+6. Add the **Claim to Phone** widget to your home screen.
 
 ---
 
@@ -321,8 +318,16 @@ BudBridge/
 │   ├── pyproject.toml         # Package metadata and build config
 │   └── build.py               # PyInstaller build script
 ├── android/
-│   ├── tasker-setup.md        # Step-by-step Tasker configuration guide
-│   └── BudBridge.prj.xml      # Tasker project export (import directly)
+│   └── app/src/main/kotlin/com/budbridge/
+│       ├── MainActivity.kt    # Settings UI
+│       ├── BudBridgeService.kt# Foreground service + HTTP server lifecycle
+│       ├── HttpServer.kt      # HTTP server (handles /ping, /status, /release)
+│       ├── BluetoothHandler.kt# BT connect/disconnect via HFP hidden API
+│       ├── HandoffManager.kt  # Handoff state machine
+│       ├── ClaimWidget.kt     # Home screen widget
+│       ├── ClaimTile.kt       # Quick Settings tile
+│       ├── NsdHelper.kt       # mDNS peer discovery
+│       └── Prefs.kt           # Shared preferences wrapper
 ├── docs/
 │   ├── troubleshooting.md     # Common issues and solutions
 │   └── battery-optimization.md # Per-OEM Tasker battery fix guide
@@ -350,9 +355,10 @@ BudBridge/
 
 ### Phone
 
-| Tool | Cost | Source |
-|------|------|--------|
-| Tasker | ~$3.49 | [Google Play](https://play.google.com/store/apps/details?id=net.dinglisch.android.taskerm) |
+| Requirement | Notes |
+|-------------|-------|
+| Android 8.0+ | API level 26 or higher |
+| Bluetooth Classic | Required for HFP headphone control |
 
 ---
 
@@ -369,8 +375,8 @@ Contributions are welcome! Please:
 ### Development Setup
 
 ```bash
-git clone https://github.com/yourusername/budbridge.git
-cd budbridge/pc
+git clone https://github.com/Eclectic-Wind/BudBridge.git
+cd BudBridge/pc
 pip install -e ".[dev]"
 pytest
 ```
@@ -390,4 +396,4 @@ pytest
 
 MIT License — see [LICENSE](LICENSE) for details.
 
-Copyright (c) 2025 BudBridge Contributors
+Copyright (c) 2026 BudBridge Contributors

@@ -12,7 +12,9 @@
       "Bash(py assets/generate_icons.py)",
       "Bash(py -c \":*)",
       "Bash(echo $SHELL)",
-      "Bash(echo $0)"
+      "Bash(echo $0)",
+      "Bash(ls -la \"/d/ACTIVE_PROJECTS/Tools & Utilities/BudBridge/\")",
+      "Bash(ls -la \"/d/ACTIVE_PROJECTS/Tools & Utilities/BudBridge/pc/\")"
     ]
   }
 }
