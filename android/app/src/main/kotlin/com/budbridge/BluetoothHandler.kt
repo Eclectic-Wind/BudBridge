@@ -82,7 +82,9 @@ class BluetoothHandler(private val context: Context) {
             override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
                 try {
                     if (proxy is BluetoothHeadset) invokeConnect(proxy, device)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.w(TAG, "HFP connect failed: $e")
+                }
                 adapter.closeProfileProxy(profile, proxy)
             }
             override fun onServiceDisconnected(profile: Int) {}
@@ -119,7 +121,9 @@ class BluetoothHandler(private val context: Context) {
             override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
                 try {
                     if (proxy is BluetoothHeadset) invokeDisconnect(proxy, device)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.w(TAG, "HFP disconnect failed: $e")
+                }
                 adapter.closeProfileProxy(profile, proxy)
             }
             override fun onServiceDisconnected(profile: Int) {}
@@ -140,7 +144,7 @@ class BluetoothHandler(private val context: Context) {
     private fun invokeConnect(proxy: BluetoothProfile, device: BluetoothDevice): Boolean {
         return try {
             val method = proxy.javaClass.getMethod("connect", BluetoothDevice::class.java)
-            method.invoke(proxy, device) as? Boolean ?: true
+            method.invoke(proxy, device) as? Boolean ?: false
         } catch (e: Exception) {
             Log.w(TAG, "invokeConnect failed: $e")
             false
@@ -150,7 +154,7 @@ class BluetoothHandler(private val context: Context) {
     private fun invokeDisconnect(proxy: BluetoothProfile, device: BluetoothDevice): Boolean {
         return try {
             val method = proxy.javaClass.getMethod("disconnect", BluetoothDevice::class.java)
-            method.invoke(proxy, device) as? Boolean ?: true
+            method.invoke(proxy, device) as? Boolean ?: false
         } catch (e: Exception) {
             Log.w(TAG, "invokeDisconnect failed: $e")
             false

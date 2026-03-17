@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 import threading
 from typing import Callable, Optional
 
@@ -43,7 +44,7 @@ def _make_app(config, handoff_fn: Callable):
         secret = config.network.shared_secret
         if secret:
             token = request.headers.get("X-BudBridge-Token", "")
-            if token != secret:
+            if not secrets.compare_digest(token, secret):
                 log.warning("Bad or missing X-BudBridge-Token from %s", remote)
                 abort(403)
 

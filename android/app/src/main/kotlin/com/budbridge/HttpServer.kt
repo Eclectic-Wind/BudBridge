@@ -7,6 +7,7 @@ import java.io.InputStreamReader
 import java.io.PrintWriter
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -87,11 +88,11 @@ class HttpServer(
                     return
                 }
 
-                // Shared secret check
+                // Shared secret check (constant-time to prevent timing attacks)
                 val secret = getSharedSecret()
                 if (secret.isNotEmpty()) {
                     val token = headers["x-budbridge-token"] ?: ""
-                    if (token != secret) {
+                    if (!MessageDigest.isEqual(token.toByteArray(), secret.toByteArray())) {
                         respond(writer, 403, jsonError("unauthorized", "Invalid token"))
                         return
                     }

@@ -4,11 +4,26 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 import time
 from typing import Optional
 
 log = logging.getLogger(__name__)
+
+
+def _ps_escape_name(name: str) -> str:
+    """Sanitize a device name for safe interpolation into a PowerShell -like pattern.
+
+    Removes characters that could break the enclosing script structure, then
+    escapes PowerShell wildcard metacharacters so the name matches literally.
+    """
+    # Strip characters that could escape the enclosing double-quoted string or script block
+    safe = re.sub(r'["`${}()|;&]', "", name)
+    # Escape -like wildcards to prevent unintended glob expansion
+    safe = safe.replace("[", "`[").replace("]", "`]").replace("*", "`*").replace("?", "`?")
+    return safe
+
 
 # ---------------------------------------------------------------------------
 # PowerShell backend
@@ -27,8 +42,9 @@ def _run_ps(script: str, timeout: int = 30) -> subprocess.CompletedProcess:
 
 def _powershell_connect(friendly_name: str) -> None:
     """Enable the Bluetooth PnP device matching *friendly_name*."""
+    safe_name = _ps_escape_name(friendly_name)
     script = f"""
-$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{friendly_name}*" }}
+$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{safe_name}*" }}
 if ($dev) {{
     Enable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false
 }} else {{
@@ -44,8 +60,9 @@ if ($dev) {{
 
 def _powershell_disconnect(friendly_name: str) -> None:
     """Disable the Bluetooth PnP device matching *friendly_name*."""
+    safe_name = _ps_escape_name(friendly_name)
     script = f"""
-$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{friendly_name}*" }}
+$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{safe_name}*" }}
 if ($dev) {{
     Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false
 }} else {{
@@ -61,8 +78,9 @@ if ($dev) {{
 
 def _powershell_is_connected(friendly_name: str) -> bool:
     """Return True if the PnP device is present and Status == OK."""
+    safe_name = _ps_escape_name(friendly_name)
     script = f"""
-$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{friendly_name}*" }}
+$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{safe_name}*" }}
 if ($dev -and $dev.Status -eq "OK") {{ Write-Output "true" }} else {{ Write-Output "false" }}
 """
     result = _run_ps(script)

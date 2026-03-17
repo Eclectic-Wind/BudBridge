@@ -126,13 +126,15 @@ class DiscoveryService:
                     pass
 
             zc = Zeroconf()
-            browser = ServiceBrowser(zc, _SERVICE_TYPE, _Listener())
+            try:
+                browser = ServiceBrowser(zc, _SERVICE_TYPE, _Listener())
 
-            deadline = time.monotonic() + timeout
-            while time.monotonic() < deadline and found[0] is None:
-                time.sleep(0.1)
+                deadline = time.monotonic() + timeout
+                while time.monotonic() < deadline and found[0] is None:
+                    time.sleep(0.1)
+            finally:
+                zc.close()
 
-            zc.close()
             return found[0]
 
         except ImportError:

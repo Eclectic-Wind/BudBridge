@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"d:/ACTIVE_PROJECTS/Tools & Utilities/BudBridge\")",
+      "Bash(find \"d:/ACTIVE_PROJECTS/Tools & Utilities/BudBridge\" -type f)",
+      "Bash(python -c \":*)",
+      "Bash(python3 -c \":*)",
+      "Bash(where.exe py:*)",
+      "Bash(py --version)",
+      "Bash(py -m pip --version)",
+      "Bash(py -m pip install -r requirements.txt)",
+      "Bash(py assets/generate_icons.py)",
+      "Bash(py -c \":*)",
+      "Bash(echo $SHELL)",
+      "Bash(echo $0)"
+    ]
+  }
+}

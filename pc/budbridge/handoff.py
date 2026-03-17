@@ -227,4 +227,6 @@ class HandoffManager:
 
     @property
     def in_progress(self) -> bool:
-        return self._in_progress
+        # The lock is held for the entire duration of any handoff operation,
+        # so locked() is the authoritative signal that work is in flight.
+        return self._lock.locked()
