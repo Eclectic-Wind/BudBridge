@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "budbridge"
+version = "1.0.0"
+description = "One-click Bluetooth handoff between Android phone and Windows PC"
+readme = "../README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "BudBridge Contributors" },
+]
+keywords = ["bluetooth", "handoff", "windows", "android", "tasker", "headphones"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "pystray>=0.19",
+    "Pillow>=10.0",
+    "Flask>=3.0",
+    "requests>=2.31",
+    "pynput>=1.7",
+    "plyer>=2.1",
+    "toml>=0.10",
+    "zeroconf>=0.131",
+]
+
+[project.optional-dependencies]
+ble = ["bleak>=0.21"]
+dev = [
+    "pyinstaller>=6.0",
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+
+[project.scripts]
+budbridge = "budbridge.main:main"
+
+[project.gui-scripts]
+budbridge-gui = "budbridge.main:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/budbridge"
+"Bug Tracker" = "https://github.com/yourusername/budbridge/issues"
+Documentation = "https://github.com/yourusername/budbridge/tree/main/docs"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["budbridge*"]
+
+[tool.setuptools.package-data]
+budbridge = ["../assets/*.ico"]

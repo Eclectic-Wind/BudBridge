@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BudBridge</string>
+    <string name="tile_label">Claim Audio</string>
+    <string name="widget_label">BudBridge</string>
+</resources>

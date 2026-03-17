@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- App title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BudBridge"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="@color/primary"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="One-tap Bluetooth handoff"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="32dp" />
+
+        <!-- ════════════════════════════════════════
+             Step 1: Permissions
+             ════════════════════════════════════════ -->
+        <LinearLayout
+            android:id="@+id/layout_setup1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Step 1 of 3 — Permissions"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BudBridge needs Bluetooth and notification access to work in the background."
+                android:textSize="15sp"
+                android:textColor="@color/text_secondary"
+                android:lineSpacingMultiplier="1.4"
+                android:layout_marginBottom="24dp" />
+
+            <Button
+                android:id="@+id/btn_grant_permissions"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Grant Permissions"
+                android:backgroundTint="@color/primary" />
+        </LinearLayout>
+
+        <!-- ════════════════════════════════════════
+             Step 2: Pick Bluetooth device
+             ════════════════════════════════════════ -->
+        <LinearLayout
+            android:id="@+id/layout_setup2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Step 2 of 3 — Select Device"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tap your Bluetooth earbuds or headphones below."
+                android:textSize="15sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/tv_no_devices"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="No paired audio devices found.\nPair your headphones with this phone first."
+                android:textColor="@color/error"
+                android:visibility="gone" />
+
+            <ListView
+                android:id="@+id/device_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:divider="@color/divider"
+                android:dividerHeight="1dp" />
+        </LinearLayout>
+
+        <!-- ════════════════════════════════════════
+             Step 3: Discover PC
+             ════════════════════════════════════════ -->
+        <LinearLayout
+            android:id="@+id/layout_setup3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Step 3 of 3 — Find PC"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="12dp" />
+
+            <ProgressBar
+                android:id="@+id/progress_discovery"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:indeterminate="true"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/tv_discovery_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Searching…"
+                android:textSize="15sp"
+                android:textColor="@color/text_secondary"
+                android:lineSpacingMultiplier="1.4"
+                android:layout_marginBottom="24dp" />
+
+            <Button
+                android:id="@+id/btn_skip_discovery"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Skip — I'll set up the PC later"
+                android:backgroundTint="@color/surface" />
+        </LinearLayout>
+
+        <!-- ════════════════════════════════════════
+             Status screen
+             ════════════════════════════════════════ -->
+        <LinearLayout
+            android:id="@+id/layout_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Active"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/connected"
+                android:layout_marginBottom="24dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Device"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary" />
+
+            <TextView
+                android:id="@+id/tv_status_device"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PC address"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary" />
+
+            <TextView
+                android:id="@+id/tv_status_pc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="32dp" />
+
+            <Button
+                android:id="@+id/btn_claim_now"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Claim Audio to Phone"
+                android:backgroundTint="@color/primary"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_reset_setup"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Reset / Change Device"
+                android:backgroundTint="@color/surface" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

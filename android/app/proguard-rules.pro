@@ -1,0 +1,2 @@
+-keep class com.budbridge.** { *; }
+-keepattributes *Annotation*

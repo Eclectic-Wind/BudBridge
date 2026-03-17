@@ -1,0 +1,95 @@
+# BudBridge configuration example
+# Copy this file to ~/.budbridge/config.toml and edit as needed.
+#
+# BudBridge bridges your Bluetooth headphones between your Android phone
+# and your Windows PC with a single hotkey or tray-menu click.
+
+# ---------------------------------------------------------------------------
+# [device] — Your Bluetooth headphone details
+# ---------------------------------------------------------------------------
+[device]
+
+# The Bluetooth MAC address of your headphones.
+# Format: "AA:BB:CC:DD:EE:FF"
+# Find it in Windows Settings > Bluetooth & devices > your device > properties,
+# or run the BudBridge setup wizard which lists paired devices automatically.
+bt_mac = "AA:BB:CC:DD:EE:FF"
+
+# The friendly / display name of your headphones exactly as shown in Windows.
+# BudBridge uses this for PowerShell device lookup (partial match supported).
+# Example: "WH-1000XM5" or "AirPods Pro"
+bt_friendly_name = "My Headphones"
+
+
+# ---------------------------------------------------------------------------
+# [network] — How BudBridge communicates with the Tasker app on your phone
+# ---------------------------------------------------------------------------
+[network]
+
+# Your phone's local IP address on your home/office Wi-Fi network.
+# Find it in: Android Settings → About Phone → Status → IP Address
+# Tip: assign a static/reserved DHCP lease to avoid it changing.
+phone_ip = "192.168.1.42"
+
+# The port Tasker's HTTP Server task listens on (configured in Tasker).
+# Default: 8521
+phone_port = 8521
+
+# The port BudBridge's own HTTP server listens on (for Tasker to call back).
+# Open this port in Windows Firewall for your home network profile.
+# Default: 8522
+pc_port = 8522
+
+# Optional shared secret for mutual authentication.
+# Set the same value in both this file and in Tasker's %bb_secret variable.
+# If empty (""), authentication is IP-based only.
+# Example: shared_secret = "change-me-please-abc123"
+shared_secret = ""
+
+
+# ---------------------------------------------------------------------------
+# [behavior] — Handoff timing and BT backend selection
+# ---------------------------------------------------------------------------
+[behavior]
+
+# Milliseconds to wait after asking the phone to release Bluetooth before
+# BudBridge attempts to connect on the PC side.
+# Increase this if the PC keeps failing to connect (phone is slow to disconnect).
+# Default: 2500
+handoff_delay_ms = 2500
+
+# Number of additional BT connect attempts if the first one fails.
+# Total attempts = 1 + retry_count
+# Default: 2
+retry_count = 2
+
+# Milliseconds to wait between retry attempts.
+# Default: 2000
+retry_delay_ms = 2000
+
+# Bluetooth connection method.
+# Options:
+#   "powershell"  — uses Get-PnpDevice / Enable-PnpDevice (default, no extra tools)
+#   "btcom"       — uses btcom.exe (must be on PATH); supports A2DP + HFP
+#   "bleak"       — BLE-only devices; requires: pip install bleak
+bt_method = "powershell"
+
+
+# ---------------------------------------------------------------------------
+# [ui] — User interface and startup preferences
+# ---------------------------------------------------------------------------
+[ui]
+
+# Global hotkey to trigger "Claim to PC" from anywhere.
+# Format: modifier(s) + key, e.g. "ctrl+shift+b" or "ctrl+alt+h"
+# Modifiers: ctrl, shift, alt, win/super
+hotkey = "ctrl+shift+b"
+
+# Start BudBridge automatically when you log in to Windows.
+# BudBridge adds itself to HKCU\Software\Microsoft\Windows\CurrentVersion\Run.
+# Default: false
+auto_start = false
+
+# Show Windows toast notifications for connect/disconnect/error events.
+# Default: true
+show_notifications = true
