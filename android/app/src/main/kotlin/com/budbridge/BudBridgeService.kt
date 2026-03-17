@@ -71,7 +71,6 @@ class BudBridgeService : Service() {
         httpServer.start()
         nsdHelper.startAdvertising(port)
 
-        acquireWakeLock()
         Log.i(TAG, "BudBridgeService started on port $port")
     }
 
@@ -98,18 +97,22 @@ class BudBridgeService : Service() {
     // -------------------------------------------------------------------------
 
     private fun triggerClaim() {
+        acquireWakeLock()
         updateNotification("Claiming audio...")
         handoffManager.claimToPhone { success, message ->
             val notifText = if (success) "Connected — $message" else "Failed — $message"
             updateNotification(notifText)
+            releaseWakeLock()
             Log.i(TAG, "Claim result: $message")
         }
     }
 
     private fun handleReleaseRequest(): Boolean {
+        acquireWakeLock()
         val wasConnected = btHandler.isConnected(btDeviceAddress)
         btHandler.disconnect(btDeviceAddress)
         updateNotification("Released to PC")
+        releaseWakeLock()
         return wasConnected
     }
 
@@ -166,9 +169,14 @@ class BudBridgeService : Service() {
     // Wake lock
     // -------------------------------------------------------------------------
 
-    private fun acquireWakeLock() {
+    fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
         wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BudBridge:WakeLock")
-            .also { it.acquire() }
+            .also { it.acquire(10_000L) }  // 10 s max — enough for any handoff
+    }
+
+    fun releaseWakeLock() {
+        if (wakeLock?.isHeld == true) wakeLock?.release()
     }
 }
