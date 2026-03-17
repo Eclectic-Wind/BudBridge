@@ -24,15 +24,15 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Build release APK
+      - name: Build debug APK
         working-directory: android
-        run: gradle assembleRelease
+        run: gradle assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: BudBridge-apk
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
   build-exe:
@@ -85,7 +85,7 @@ jobs:
 
       - name: Rename artifacts
         run: |
-          mv app-release-unsigned.apk BudBridge-${{ github.ref_name }}.apk
+          mv app-debug.apk BudBridge-${{ github.ref_name }}.apk
           mv BudBridge.exe BudBridge-${{ github.ref_name }}.exe
 
       - name: Create GitHub Release
