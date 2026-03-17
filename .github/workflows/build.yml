@@ -93,6 +93,16 @@ jobs:
         with:
           name: BudBridge ${{ github.ref_name }}
           generate_release_notes: true
+          body: |
+            ## What's in this release
+
+            - **BudBridge.apk** — Android app (debug-signed, sideloadable)
+            - **BudBridge.exe** — Windows PC tray app (standalone, no install needed)
+
+            ### Installation
+
+            **Android:** Enable *Install from unknown sources* in Settings, then open the APK.
+            **PC:** Run `BudBridge.exe` directly — no installer required. See the [README](https://github.com/Eclectic-Wind/BudBridge#readme) for first-run setup.
           files: |
             BudBridge-${{ github.ref_name }}.apk
             BudBridge-${{ github.ref_name }}.exe
