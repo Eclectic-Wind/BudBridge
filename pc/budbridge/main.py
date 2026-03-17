@@ -79,16 +79,32 @@ def run_setup_wizard(config: BudBridgeConfig) -> None:
 
     def _populate_devices():
         listbox.delete(0, "end")
+        listbox.insert("end", "Scanning…")
         devices.clear()
-        try:
-            devs = bluetooth.list_paired_devices()
-            for d in devs:
-                status = "Connected" if d["connected"] else "Paired"
-                label = f"{d['name']}  [{d.get('mac', 'N/A')}]  — {status}"
-                listbox.insert("end", label)
-                devices.append(d)
-        except Exception as exc:
-            listbox.insert("end", f"Error listing devices: {exc}")
+        refresh_btn.config(state="disabled")
+
+        def _run():
+            try:
+                devs = bluetooth.list_paired_devices()
+            except Exception as exc:
+                devs = []
+                root.after(0, lambda: listbox.delete(0, "end") or listbox.insert("end", f"Error: {exc}"))
+                root.after(0, lambda: refresh_btn.config(state="normal"))
+                return
+
+            def _update():
+                listbox.delete(0, "end")
+                devices.clear()
+                for d in devs:
+                    status = "Connected" if d["connected"] else "Paired"
+                    label = f"{d['name']}  [{d.get('mac', 'N/A')}]  — {status}"
+                    listbox.insert("end", label)
+                    devices.append(d)
+                refresh_btn.config(state="normal")
+
+            root.after(0, _update)
+
+        threading.Thread(target=_run, daemon=True).start()
 
     refresh_btn = ttk.Button(frame1, text="Refresh Device List", command=_populate_devices)
     refresh_btn.pack(anchor="w")
@@ -209,13 +225,15 @@ def run_setup_wizard(config: BudBridgeConfig) -> None:
 # Status polling
 # ---------------------------------------------------------------------------
 
-def start_status_poll(config: BudBridgeConfig, tray: TrayApp) -> None:
+def start_status_poll(config: BudBridgeConfig, tray: TrayApp, handoff: "HandoffManager") -> None:
     """Poll BT connection status every 30 s and update the tray icon."""
 
     def _poll():
         while True:
             time.sleep(30)
             try:
+                if handoff.in_progress:
+                    continue
                 connected = bluetooth.is_connected(config)
                 tray.set_state("connected" if connected else "disconnected")
             except Exception as exc:
@@ -258,7 +276,7 @@ def main() -> None:
     discovery.start()
 
     # Status polling
-    start_status_poll(config, tray)
+    start_status_poll(config, tray, handoff)
 
     log.info("All services started. Entering tray loop.")
 

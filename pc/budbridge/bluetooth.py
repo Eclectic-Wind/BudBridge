@@ -1,37 +1,130 @@
-"""BudBridge Bluetooth backend — PowerShell, btcom.exe, or bleak."""
+"""BudBridge Bluetooth backend — Win32 ctypes (primary), btcom.exe, or bleak."""
 
 from __future__ import annotations
 
+import ctypes
 import json
 import logging
-import re
 import subprocess
 import time
-from typing import Optional
+import uuid as _uuid_mod
 
 log = logging.getLogger(__name__)
 
 
-def _ps_escape_name(name: str) -> str:
-    """Sanitize a device name for safe interpolation into a PowerShell -like pattern.
+# ---------------------------------------------------------------------------
+# Win32 ctypes backend  (no subprocess, no window, instant)
+# ---------------------------------------------------------------------------
 
-    Removes characters that could break the enclosing script structure, then
-    escapes PowerShell wildcard metacharacters so the name matches literally.
-    """
-    # Strip characters that could escape the enclosing double-quoted string or script block
-    safe = re.sub(r'["`${}()|;&]', "", name)
-    # Escape -like wildcards to prevent unintended glob expansion
-    safe = safe.replace("[", "`[").replace("]", "`]").replace("*", "`*").replace("?", "`?")
-    return safe
+class _GUID(ctypes.Structure):
+    _fields_ = [
+        ("Data1", ctypes.c_ulong),
+        ("Data2", ctypes.c_ushort),
+        ("Data3", ctypes.c_ushort),
+        ("Data4", ctypes.c_ubyte * 8),
+    ]
+
+
+def _make_guid(s: str) -> _GUID:
+    u = _uuid_mod.UUID(s)
+    return _GUID(u.time_low, u.time_mid, u.time_hi_version,
+                 (ctypes.c_ubyte * 8)(*u.bytes[8:]))
+
+
+class _SYSTEMTIME(ctypes.Structure):
+    _fields_ = [
+        ("wYear",         ctypes.c_uint16),
+        ("wMonth",        ctypes.c_uint16),
+        ("wDayOfWeek",    ctypes.c_uint16),
+        ("wDay",          ctypes.c_uint16),
+        ("wHour",         ctypes.c_uint16),
+        ("wMinute",       ctypes.c_uint16),
+        ("wSecond",       ctypes.c_uint16),
+        ("wMilliseconds", ctypes.c_uint16),
+    ]
+
+
+class _BT_DEVICE_INFO(ctypes.Structure):
+    # Layout matches Win32 BLUETOOTH_DEVICE_INFO (560 bytes on both 32/64-bit Windows).
+    # Natural alignment: 4-byte padding after dwSize aligns Address to offset 8.
+    _fields_ = [
+        ("dwSize",          ctypes.c_uint32),
+        ("Address",         ctypes.c_uint64),
+        ("ulClassofDevice", ctypes.c_uint32),
+        ("fConnected",      ctypes.c_int32),
+        ("fRemembered",     ctypes.c_int32),
+        ("fAuthenticated",  ctypes.c_int32),
+        ("stLastSeen",      _SYSTEMTIME),
+        ("stLastUsed",      _SYSTEMTIME),
+        ("szName",          ctypes.c_wchar * 248),
+    ]
+
+
+_A2DP_SINK = "{0000110B-0000-1000-8000-00805F9B34FB}"
+_HFP       = "{0000111E-0000-1000-8000-00805F9B34FB}"
+
+_dll_cache = None
+
+
+def _dll() -> ctypes.WinDLL:
+    global _dll_cache
+    if _dll_cache is None:
+        dll = ctypes.WinDLL("BluetoothAPIs.dll")
+        dll.BluetoothSetServiceState.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(_BT_DEVICE_INFO),
+            ctypes.POINTER(_GUID),
+            ctypes.c_uint32,
+        ]
+        dll.BluetoothSetServiceState.restype = ctypes.c_uint32
+        dll.BluetoothGetDeviceInfo.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(_BT_DEVICE_INFO),
+        ]
+        dll.BluetoothGetDeviceInfo.restype = ctypes.c_uint32
+        _dll_cache = dll
+    return _dll_cache
+
+
+def _new_dev(mac_int: int) -> _BT_DEVICE_INFO:
+    dev = _BT_DEVICE_INFO()
+    dev.dwSize = ctypes.sizeof(_BT_DEVICE_INFO)
+    dev.Address = mac_int
+    return dev
+
+
+def _win32_connect(mac_int: int) -> None:
+    dev  = _new_dev(mac_int)
+    a2dp = _make_guid(_A2DP_SINK)
+    hfp  = _make_guid(_HFP)
+    r1 = _dll().BluetoothSetServiceState(None, ctypes.byref(dev), ctypes.byref(a2dp), 1)
+    r2 = _dll().BluetoothSetServiceState(None, ctypes.byref(dev), ctypes.byref(hfp),  1)
+    if r1 != 0 and r2 != 0:
+        raise RuntimeError(f"BluetoothSetServiceState connect failed: A2DP={r1} HFP={r2}")
+
+
+def _win32_disconnect(mac_int: int) -> None:
+    dev  = _new_dev(mac_int)
+    a2dp = _make_guid(_A2DP_SINK)
+    hfp  = _make_guid(_HFP)
+    r1 = _dll().BluetoothSetServiceState(None, ctypes.byref(dev), ctypes.byref(a2dp), 0)
+    r2 = _dll().BluetoothSetServiceState(None, ctypes.byref(dev), ctypes.byref(hfp),  0)
+    if r1 != 0 and r2 != 0:
+        raise RuntimeError(f"BluetoothSetServiceState disconnect failed: A2DP={r1} HFP={r2}")
+
+
+def _win32_is_connected(mac_int: int) -> bool:
+    dev = _new_dev(mac_int)
+    rc = _dll().BluetoothGetDeviceInfo(None, ctypes.byref(dev))
+    return rc == 0 and bool(dev.fConnected)
 
 
 # ---------------------------------------------------------------------------
-# PowerShell backend
+# PowerShell runner (list_paired_devices only — one-time setup wizard use)
 # ---------------------------------------------------------------------------
 
 
 def _run_ps(script: str, timeout: int = 30) -> subprocess.CompletedProcess:
-    """Run a PowerShell script and return the CompletedProcess."""
     return subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
         capture_output=True,
@@ -41,173 +134,37 @@ def _run_ps(script: str, timeout: int = 30) -> subprocess.CompletedProcess:
     )
 
 
-_WINRT_HELPER = r"""
-Add-Type -AssemblyName System.Runtime.WindowsRuntime | Out-Null
-
-$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() |
-    Where-Object {
-        $_.Name -eq 'AsTask' -and
-        $_.GetParameters().Count -eq 1 -and
-        $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
-    })[0]
-
-function Await($WinRtTask, $ResultType) {
-    $spec = $asTaskGeneric.MakeGenericMethod($ResultType)
-    $task = $spec.Invoke($null, @($WinRtTask))
-    $task.Wait(-1) | Out-Null
-    $task.Result
-}
-
-[void][Windows.Devices.Bluetooth.BluetoothDevice,Windows.Devices.Bluetooth,ContentType=WindowsRuntime]
-[void][Windows.Devices.Enumeration.DevicePairingResult,Windows.Devices.Enumeration,ContentType=WindowsRuntime]
-"""
-
-
-def _mac_to_int(mac: str) -> int:
-    return int(mac.replace(":", "").replace("-", ""), 16)
-
-
-def _powershell_connect(friendly_name: str, mac: str = "") -> None:
-    """Connect a Bluetooth device using the WinRT Bluetooth API (no admin required)."""
-    if mac:
-        mac_int = _mac_to_int(mac)
-        script = _WINRT_HELPER + f"""
-$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromBluetoothAddressAsync({mac_int})) `
-    ([Windows.Devices.Bluetooth.BluetoothDevice])
-if ($null -eq $device) {{ Write-Error "Device not found by MAC"; exit 1 }}
-$access = Await ($device.RequestAccessAsync()) ([Windows.Devices.Bluetooth.BluetoothAccessStatus])
-if ($access -ne [Windows.Devices.Bluetooth.BluetoothAccessStatus]::Allowed) {{
-    Write-Error "Access denied: $access"; exit 1
-}}
-Write-Output "ok"
-"""
-    else:
-        safe_name = _ps_escape_name(friendly_name)
-        script = _WINRT_HELPER + f"""
-$selector = [Windows.Devices.Bluetooth.BluetoothDevice]::GetDeviceSelectorFromPairingState($true)
-$devices  = Await ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($selector)) `
-    ([Windows.Devices.Enumeration.DeviceInformationCollection])
-$info = $devices | Where-Object {{ $_.Name -like "*{safe_name}*" }} | Select-Object -First 1
-if ($null -eq $info) {{ Write-Error "Device not found"; exit 1 }}
-$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromIdAsync($info.Id)) `
-    ([Windows.Devices.Bluetooth.BluetoothDevice])
-$access = Await ($device.RequestAccessAsync()) ([Windows.Devices.Bluetooth.BluetoothAccessStatus])
-if ($access -ne [Windows.Devices.Bluetooth.BluetoothAccessStatus]::Allowed) {{
-    Write-Error "Access denied: $access"; exit 1
-}}
-Write-Output "ok"
-"""
-    result = _run_ps(script)
-    if result.returncode != 0 or "ok" not in result.stdout.lower():
-        raise RuntimeError(
-            f"PowerShell connect failed (rc={result.returncode}): {result.stderr.strip()}"
-        )
-
-
-def _powershell_disconnect(friendly_name: str, mac: str = "") -> None:
-    """Disconnect a Bluetooth device by disposing the WinRT device object."""
-    if mac:
-        mac_int = _mac_to_int(mac)
-        script = _WINRT_HELPER + f"""
-$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromBluetoothAddressAsync({mac_int})) `
-    ([Windows.Devices.Bluetooth.BluetoothDevice])
-if ($null -eq $device) {{ Write-Error "Device not found by MAC"; exit 1 }}
-$device.Dispose()
-Write-Output "ok"
-"""
-    else:
-        safe_name = _ps_escape_name(friendly_name)
-        script = _WINRT_HELPER + f"""
-$selector = [Windows.Devices.Bluetooth.BluetoothDevice]::GetDeviceSelectorFromPairingState($true)
-$devices  = Await ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($selector)) `
-    ([Windows.Devices.Enumeration.DeviceInformationCollection])
-$info = $devices | Where-Object {{ $_.Name -like "*{safe_name}*" }} | Select-Object -First 1
-if ($null -eq $info) {{ Write-Error "Device not found"; exit 1 }}
-$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromIdAsync($info.Id)) `
-    ([Windows.Devices.Bluetooth.BluetoothDevice])
-$device.Dispose()
-Write-Output "ok"
-"""
-    result = _run_ps(script)
-    if result.returncode != 0 or "ok" not in result.stdout.lower():
-        raise RuntimeError(
-            f"PowerShell disconnect failed (rc={result.returncode}): {result.stderr.strip()}"
-        )
-
-
-def _powershell_is_connected(friendly_name: str, mac: str = "") -> bool:
-    """Return True if the device is paired and currently connected."""
-    if mac:
-        mac_int = _mac_to_int(mac)
-        script = _WINRT_HELPER + f"""
-$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromBluetoothAddressAsync({mac_int})) `
-    ([Windows.Devices.Bluetooth.BluetoothDevice])
-if ($null -ne $device -and $device.ConnectionStatus -eq [Windows.Devices.Bluetooth.BluetoothConnectionStatus]::Connected) {{
-    Write-Output "true"
-}} else {{
-    Write-Output "false"
-}}
-"""
-    else:
-        safe_name = _ps_escape_name(friendly_name)
-        script = _WINRT_HELPER + f"""
-$selector = [Windows.Devices.Bluetooth.BluetoothDevice]::GetDeviceSelectorFromPairingState($true)
-$devices  = Await ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($selector)) `
-    ([Windows.Devices.Enumeration.DeviceInformationCollection])
-$info = $devices | Where-Object {{ $_.Name -like "*{safe_name}*" }} | Select-Object -First 1
-if ($null -eq $info) {{ Write-Output "false"; exit 0 }}
-$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromIdAsync($info.Id)) `
-    ([Windows.Devices.Bluetooth.BluetoothDevice])
-if ($null -ne $device -and $device.ConnectionStatus -eq [Windows.Devices.Bluetooth.BluetoothConnectionStatus]::Connected) {{
-    Write-Output "true"
-}} else {{
-    Write-Output "false"
-}}
-"""
-    result = _run_ps(script)
-    return result.stdout.strip().lower() == "true"
-
-
 # ---------------------------------------------------------------------------
 # btcom.exe backend
 # ---------------------------------------------------------------------------
 
-_BTCOM_PATH = "btcom"  # must be on PATH or full path set here
+_BTCOM_PATH = "btcom"
 
 
 def _btcom_connect(mac: str) -> None:
-    """Connect A2DP and HFP profiles via btcom.exe."""
     for profile in ["-s110b", "-s111e"]:
         result = subprocess.run(
             [_BTCOM_PATH, "-b", mac, "-r", profile],
-            capture_output=True,
-            text=True,
-            timeout=20,
+            capture_output=True, text=True, timeout=20,
         )
         if result.returncode != 0:
             log.warning("btcom connect %s failed for profile %s: %s", mac, profile, result.stderr)
 
 
 def _btcom_disconnect(mac: str) -> None:
-    """Disconnect A2DP and HFP profiles via btcom.exe."""
     for profile in ["-s110b", "-s111e"]:
         result = subprocess.run(
             [_BTCOM_PATH, "-b", mac, "-c", profile],
-            capture_output=True,
-            text=True,
-            timeout=20,
+            capture_output=True, text=True, timeout=20,
         )
         if result.returncode != 0:
             log.warning("btcom disconnect %s failed for profile %s: %s", mac, profile, result.stderr)
 
 
 def _btcom_is_connected(mac: str) -> bool:
-    """Check A2DP connection status via btcom.exe."""
     result = subprocess.run(
         [_BTCOM_PATH, "-b", mac, "-q"],
-        capture_output=True,
-        text=True,
-        timeout=10,
+        capture_output=True, text=True, timeout=10,
     )
     return result.returncode == 0 and "connected" in result.stdout.lower()
 
@@ -222,12 +179,12 @@ def _bleak_connect(mac: str) -> None:
         import asyncio
         from bleak import BleakClient
 
-        async def _do_connect():
+        async def _do():
             async with BleakClient(mac, timeout=15.0) as client:
                 if not client.is_connected:
                     raise RuntimeError(f"bleak: failed to connect to {mac}")
 
-        asyncio.run(_do_connect())
+        asyncio.run(_do())
     except ImportError:
         raise RuntimeError("bleak is not installed. Run: pip install bleak")
 
@@ -237,11 +194,11 @@ def _bleak_disconnect(mac: str) -> None:
         import asyncio
         from bleak import BleakClient
 
-        async def _do_disconnect():
+        async def _do():
             async with BleakClient(mac, timeout=15.0) as client:
                 await client.disconnect()
 
-        asyncio.run(_do_disconnect())
+        asyncio.run(_do())
     except ImportError:
         raise RuntimeError("bleak is not installed. Run: pip install bleak")
 
@@ -251,17 +208,17 @@ def _bleak_is_connected(mac: str) -> bool:
         import asyncio
         from bleak import BleakClient
 
-        result_holder = [False]
+        holder = [False]
 
         async def _check():
             try:
                 async with BleakClient(mac, timeout=5.0) as client:
-                    result_holder[0] = client.is_connected
+                    holder[0] = client.is_connected
             except Exception:
-                result_holder[0] = False
+                holder[0] = False
 
         asyncio.run(_check())
-        return result_holder[0]
+        return holder[0]
     except ImportError:
         return False
 
@@ -269,6 +226,20 @@ def _bleak_is_connected(mac: str) -> bool:
 # ---------------------------------------------------------------------------
 # Unified public interface
 # ---------------------------------------------------------------------------
+
+
+def _mac_to_int(mac: str) -> int:
+    return int(mac.replace(":", "").replace("-", ""), 16)
+
+
+def _resolve_mac(friendly_name: str, mac: str) -> int:
+    """Return the device MAC as an integer, resolving by name if mac is empty."""
+    if mac:
+        return _mac_to_int(mac)
+    for d in list_paired_devices():
+        if friendly_name.lower() in (d["name"] or "").lower() and d["mac"]:
+            return _mac_to_int(d["mac"])
+    raise RuntimeError(f"Could not find MAC address for device '{friendly_name}'")
 
 
 def connect(config) -> bool:
@@ -282,7 +253,7 @@ def connect(config) -> bool:
     for attempt in range(retry_count + 1):
         try:
             if method == "powershell":
-                _powershell_connect(name, mac)
+                _win32_connect(_resolve_mac(name, mac))
             elif method == "btcom":
                 _btcom_connect(mac)
             elif method == "bleak":
@@ -311,7 +282,7 @@ def disconnect(config) -> bool:
 
     try:
         if method == "powershell":
-            _powershell_disconnect(name, mac)
+            _win32_disconnect(_resolve_mac(name, mac))
         elif method == "btcom":
             _btcom_disconnect(mac)
         elif method == "bleak":
@@ -336,7 +307,7 @@ def is_connected(config) -> bool:
 
     try:
         if method == "powershell":
-            return _powershell_is_connected(name, mac)
+            return _win32_is_connected(_resolve_mac(name, mac))
         elif method == "btcom":
             return _btcom_is_connected(mac)
         elif method == "bleak":
@@ -351,7 +322,7 @@ def is_connected(config) -> bool:
 def list_paired_devices() -> list:
     """Return a list of dicts with keys: name, mac, connected.
 
-    Uses PowerShell to query PnP Bluetooth devices.
+    Uses PowerShell to query PnP Bluetooth devices (setup wizard only).
     """
     script = """
 Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, Status, InstanceId | ConvertTo-Json
@@ -362,7 +333,6 @@ Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, Status, InstanceId 
             return []
 
         raw = json.loads(result.stdout.strip())
-        # PowerShell returns a single object (not list) when only one device
         if isinstance(raw, dict):
             raw = [raw]
 
@@ -372,11 +342,9 @@ Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, Status, InstanceId 
             status = item.get("Status") or ""
             instance_id = item.get("InstanceId") or ""
 
-            # Extract MAC from InstanceId, e.g. BTHENUM\...\AA_BB_CC_DD_EE_FF
             mac = ""
             parts = instance_id.upper().split("\\")
             for part in parts:
-                # Look for a segment that looks like a MAC (12 hex chars with underscores)
                 candidate = part.replace("_", ":")
                 segments = candidate.split(":")
                 if len(segments) == 6 and all(len(s) == 2 for s in segments):
@@ -387,14 +355,12 @@ Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, Status, InstanceId 
                     except ValueError:
                         pass
 
-            devices.append(
-                {
-                    "name": name,
-                    "mac": mac,
-                    "connected": status.upper() == "OK",
-                    "instance_id": instance_id,
-                }
-            )
+            devices.append({
+                "name": name,
+                "mac": mac,
+                "connected": status.upper() == "OK",
+                "instance_id": instance_id,
+            })
 
         return devices
 

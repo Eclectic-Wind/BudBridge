@@ -107,9 +107,17 @@ class MainActivity : AppCompatActivity() {
             binding.deviceList.visibility = View.VISIBLE
 
             val names = pairedDevices.map { it.name ?: it.address }.toTypedArray()
-            binding.deviceList.adapter = android.widget.ArrayAdapter(
+            binding.deviceList.adapter = object : android.widget.ArrayAdapter<String>(
                 this, android.R.layout.simple_list_item_1, names
-            )
+            ) {
+                override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+                    val view = super.getView(position, convertView, parent)
+                    (view as? android.widget.TextView)?.setTextColor(
+                        ContextCompat.getColor(context, R.color.text_primary)
+                    )
+                    return view
+                }
+            }
             binding.deviceList.setOnItemClickListener { _, _, pos, _ ->
                 val device = pairedDevices[pos]
                 btDeviceAddress = device.address

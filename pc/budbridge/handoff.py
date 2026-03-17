@@ -119,6 +119,8 @@ class HandoffManager:
         """
         if not self._lock.acquire(blocking=False):
             log.info("claim_to_pc: handoff already in progress, ignoring.")
+            from budbridge.notify import notify
+            notify("BudBridge", "Handoff already in progress…", self._config.ui.show_notifications)
             return
 
         self._in_progress = True
