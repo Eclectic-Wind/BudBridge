@@ -37,51 +37,132 @@ def _run_ps(script: str, timeout: int = 30) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         timeout=timeout,
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
 
 
-def _powershell_connect(friendly_name: str) -> None:
-    """Enable the Bluetooth PnP device matching *friendly_name*."""
-    safe_name = _ps_escape_name(friendly_name)
-    script = f"""
-$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{safe_name}*" }}
-if ($dev) {{
-    Enable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false
-}} else {{
-    exit 1
+_WINRT_HELPER = r"""
+Add-Type -AssemblyName System.Runtime.WindowsRuntime | Out-Null
+
+$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() |
+    Where-Object {
+        $_.Name -eq 'AsTask' -and
+        $_.GetParameters().Count -eq 1 -and
+        $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+    })[0]
+
+function Await($WinRtTask, $ResultType) {
+    $spec = $asTaskGeneric.MakeGenericMethod($ResultType)
+    $task = $spec.Invoke($null, @($WinRtTask))
+    $task.Wait(-1) | Out-Null
+    $task.Result
+}
+
+[void][Windows.Devices.Bluetooth.BluetoothDevice,Windows.Devices.Bluetooth,ContentType=WindowsRuntime]
+[void][Windows.Devices.Enumeration.DevicePairingResult,Windows.Devices.Enumeration,ContentType=WindowsRuntime]
+"""
+
+
+def _mac_to_int(mac: str) -> int:
+    return int(mac.replace(":", "").replace("-", ""), 16)
+
+
+def _powershell_connect(friendly_name: str, mac: str = "") -> None:
+    """Connect a Bluetooth device using the WinRT Bluetooth API (no admin required)."""
+    if mac:
+        mac_int = _mac_to_int(mac)
+        script = _WINRT_HELPER + f"""
+$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromBluetoothAddressAsync({mac_int})) `
+    ([Windows.Devices.Bluetooth.BluetoothDevice])
+if ($null -eq $device) {{ Write-Error "Device not found by MAC"; exit 1 }}
+$access = Await ($device.RequestAccessAsync()) ([Windows.Devices.Bluetooth.BluetoothAccessStatus])
+if ($access -ne [Windows.Devices.Bluetooth.BluetoothAccessStatus]::Allowed) {{
+    Write-Error "Access denied: $access"; exit 1
 }}
+Write-Output "ok"
+"""
+    else:
+        safe_name = _ps_escape_name(friendly_name)
+        script = _WINRT_HELPER + f"""
+$selector = [Windows.Devices.Bluetooth.BluetoothDevice]::GetDeviceSelectorFromPairingState($true)
+$devices  = Await ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($selector)) `
+    ([Windows.Devices.Enumeration.DeviceInformationCollection])
+$info = $devices | Where-Object {{ $_.Name -like "*{safe_name}*" }} | Select-Object -First 1
+if ($null -eq $info) {{ Write-Error "Device not found"; exit 1 }}
+$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromIdAsync($info.Id)) `
+    ([Windows.Devices.Bluetooth.BluetoothDevice])
+$access = Await ($device.RequestAccessAsync()) ([Windows.Devices.Bluetooth.BluetoothAccessStatus])
+if ($access -ne [Windows.Devices.Bluetooth.BluetoothAccessStatus]::Allowed) {{
+    Write-Error "Access denied: $access"; exit 1
+}}
+Write-Output "ok"
 """
     result = _run_ps(script)
-    if result.returncode != 0:
+    if result.returncode != 0 or "ok" not in result.stdout.lower():
         raise RuntimeError(
             f"PowerShell connect failed (rc={result.returncode}): {result.stderr.strip()}"
         )
 
 
-def _powershell_disconnect(friendly_name: str) -> None:
-    """Disable the Bluetooth PnP device matching *friendly_name*."""
-    safe_name = _ps_escape_name(friendly_name)
-    script = f"""
-$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{safe_name}*" }}
-if ($dev) {{
-    Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false
-}} else {{
-    exit 1
-}}
+def _powershell_disconnect(friendly_name: str, mac: str = "") -> None:
+    """Disconnect a Bluetooth device by disposing the WinRT device object."""
+    if mac:
+        mac_int = _mac_to_int(mac)
+        script = _WINRT_HELPER + f"""
+$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromBluetoothAddressAsync({mac_int})) `
+    ([Windows.Devices.Bluetooth.BluetoothDevice])
+if ($null -eq $device) {{ Write-Error "Device not found by MAC"; exit 1 }}
+$device.Dispose()
+Write-Output "ok"
+"""
+    else:
+        safe_name = _ps_escape_name(friendly_name)
+        script = _WINRT_HELPER + f"""
+$selector = [Windows.Devices.Bluetooth.BluetoothDevice]::GetDeviceSelectorFromPairingState($true)
+$devices  = Await ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($selector)) `
+    ([Windows.Devices.Enumeration.DeviceInformationCollection])
+$info = $devices | Where-Object {{ $_.Name -like "*{safe_name}*" }} | Select-Object -First 1
+if ($null -eq $info) {{ Write-Error "Device not found"; exit 1 }}
+$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromIdAsync($info.Id)) `
+    ([Windows.Devices.Bluetooth.BluetoothDevice])
+$device.Dispose()
+Write-Output "ok"
 """
     result = _run_ps(script)
-    if result.returncode != 0:
+    if result.returncode != 0 or "ok" not in result.stdout.lower():
         raise RuntimeError(
             f"PowerShell disconnect failed (rc={result.returncode}): {result.stderr.strip()}"
         )
 
 
-def _powershell_is_connected(friendly_name: str) -> bool:
-    """Return True if the PnP device is present and Status == OK."""
-    safe_name = _ps_escape_name(friendly_name)
-    script = f"""
-$dev = Get-PnpDevice -Class Bluetooth | Where-Object {{ $_.FriendlyName -like "*{safe_name}*" }}
-if ($dev -and $dev.Status -eq "OK") {{ Write-Output "true" }} else {{ Write-Output "false" }}
+def _powershell_is_connected(friendly_name: str, mac: str = "") -> bool:
+    """Return True if the device is paired and currently connected."""
+    if mac:
+        mac_int = _mac_to_int(mac)
+        script = _WINRT_HELPER + f"""
+$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromBluetoothAddressAsync({mac_int})) `
+    ([Windows.Devices.Bluetooth.BluetoothDevice])
+if ($null -ne $device -and $device.ConnectionStatus -eq [Windows.Devices.Bluetooth.BluetoothConnectionStatus]::Connected) {{
+    Write-Output "true"
+}} else {{
+    Write-Output "false"
+}}
+"""
+    else:
+        safe_name = _ps_escape_name(friendly_name)
+        script = _WINRT_HELPER + f"""
+$selector = [Windows.Devices.Bluetooth.BluetoothDevice]::GetDeviceSelectorFromPairingState($true)
+$devices  = Await ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($selector)) `
+    ([Windows.Devices.Enumeration.DeviceInformationCollection])
+$info = $devices | Where-Object {{ $_.Name -like "*{safe_name}*" }} | Select-Object -First 1
+if ($null -eq $info) {{ Write-Output "false"; exit 0 }}
+$device = Await ([Windows.Devices.Bluetooth.BluetoothDevice]::FromIdAsync($info.Id)) `
+    ([Windows.Devices.Bluetooth.BluetoothDevice])
+if ($null -ne $device -and $device.ConnectionStatus -eq [Windows.Devices.Bluetooth.BluetoothConnectionStatus]::Connected) {{
+    Write-Output "true"
+}} else {{
+    Write-Output "false"
+}}
 """
     result = _run_ps(script)
     return result.stdout.strip().lower() == "true"
@@ -201,7 +282,7 @@ def connect(config) -> bool:
     for attempt in range(retry_count + 1):
         try:
             if method == "powershell":
-                _powershell_connect(name)
+                _powershell_connect(name, mac)
             elif method == "btcom":
                 _btcom_connect(mac)
             elif method == "bleak":
@@ -230,7 +311,7 @@ def disconnect(config) -> bool:
 
     try:
         if method == "powershell":
-            _powershell_disconnect(name)
+            _powershell_disconnect(name, mac)
         elif method == "btcom":
             _btcom_disconnect(mac)
         elif method == "bleak":
@@ -255,7 +336,7 @@ def is_connected(config) -> bool:
 
     try:
         if method == "powershell":
-            return _powershell_is_connected(name)
+            return _powershell_is_connected(name, mac)
         elif method == "btcom":
             return _btcom_is_connected(mac)
         elif method == "bleak":
