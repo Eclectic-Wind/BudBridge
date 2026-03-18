@@ -12,6 +12,6 @@ class ClaimTile : TileService() {
         val intent = Intent(this, BudBridgeService::class.java).apply {
             action = BudBridgeService.ACTION_CLAIM
         }
-        startService(intent)
+        startForegroundService(intent)
     }
 }
