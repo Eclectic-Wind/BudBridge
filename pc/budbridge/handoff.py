@@ -32,6 +32,8 @@ class HandoffManager:
         self._lock = threading.Lock()
         self._in_progress = False
         self._discovery: Optional[DiscoveryService] = None
+        self.released_to_phone: bool = False
+        self._ip_lock = threading.Lock()
 
         # Public callback — set by caller after construction
         self.on_state_change: Optional[Callable[[str], None]] = None
@@ -54,7 +56,8 @@ class HandoffManager:
 
     def _resolve_phone_ip(self) -> Optional[str]:
         """Return phone IP: use stored if set, otherwise discover via mDNS and cache it."""
-        ip = self._config.network.phone_ip
+        with self._ip_lock:
+            ip = self._config.network.phone_ip
         if ip:
             return ip
         if self._discovery:
@@ -62,7 +65,8 @@ class HandoffManager:
             found = self._discovery.find_phone(timeout=5.0)
             if found:
                 log.info("Phone found at %s — caching for this session.", found)
-                self._config.network.phone_ip = found
+                with self._ip_lock:
+                    self._config.network.phone_ip = found
                 return found
         return None
 
@@ -97,8 +101,8 @@ class HandoffManager:
             return False
         except requests.exceptions.ConnectionError:
             log.warning("Cannot reach phone at %s — proceeding anyway.", url)
-            # Clear cached IP so next attempt re-discovers
-            self._config.network.phone_ip = ""
+            with self._ip_lock:
+                self._config.network.phone_ip = ""
             return False
         except requests.exceptions.Timeout:
             log.warning("Phone /release timed out — proceeding anyway.")
@@ -141,9 +145,15 @@ class HandoffManager:
 
             # Attempt BT connect
             self._emit(STATE_CONNECTING)
-            success = bluetooth.connect(cfg)
+            bluetooth.connect(cfg)
+
+            # Verify the connection actually established (connect() can return
+            # success based on the command exiting cleanly, not actual link state)
+            time.sleep(1.5)
+            success = bluetooth.is_connected(cfg)
 
             if success:
+                self.released_to_phone = False
                 self._emit(STATE_CONNECTED)
                 from budbridge.notify import notify_connected
                 notify_connected(cfg.device.bt_friendly_name, cfg.ui.show_notifications)
@@ -177,6 +187,7 @@ class HandoffManager:
             success = bluetooth.disconnect(cfg)
 
             if success:
+                self.released_to_phone = True
                 self._emit(STATE_DISCONNECTED)
                 from budbridge.notify import notify_released
                 notify_released(cfg.device.bt_friendly_name, cfg.ui.show_notifications)
@@ -211,6 +222,7 @@ class HandoffManager:
             success = bluetooth.disconnect(cfg)
 
             if success:
+                self.released_to_phone = True
                 self._emit(STATE_DISCONNECTED)
                 from budbridge.notify import notify_released
                 notify_released(cfg.device.bt_friendly_name, cfg.ui.show_notifications)

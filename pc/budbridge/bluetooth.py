@@ -125,6 +125,8 @@ def _populate_dev(dev: _BT_DEVICE_INFO, radio) -> None:
 
 def _win32_connect(mac_int: int) -> None:
     radio = _get_radio()
+    if radio is None:
+        raise RuntimeError("No Bluetooth radio found")
     dev = _new_dev(mac_int)
     _populate_dev(dev, radio)
 
@@ -147,6 +149,8 @@ def _win32_connect(mac_int: int) -> None:
 
 def _win32_disconnect(mac_int: int) -> None:
     radio = _get_radio()
+    if radio is None:
+        raise RuntimeError("No Bluetooth radio found")
     dev = _new_dev(mac_int)
     _populate_dev(dev, radio)
 
@@ -161,13 +165,71 @@ def _win32_disconnect(mac_int: int) -> None:
 
 def _win32_is_connected(mac_int: int) -> bool:
     radio = _get_radio()
+    if radio is None:
+        return False
     dev = _new_dev(mac_int)
     rc = _dll().BluetoothGetDeviceInfo(radio, ctypes.byref(dev))
     return rc == 0 and bool(dev.fConnected)
 
 
 # ---------------------------------------------------------------------------
-# PowerShell runner (list_paired_devices only — one-time setup wizard use)
+# PowerShell PnP connect/disconnect  (Enable-PnpDevice / Disable-PnpDevice)
+# ---------------------------------------------------------------------------
+# BluetoothSetServiceState (above) requires the physical BT radio link to
+# already be established — it returns ERROR_SERVICE_DOES_NOT_EXIST (1060)
+# when the device has just been released.  Enable-PnpDevice tells Windows
+# Device Manager to (re-)connect the device from scratch, which is what the
+# old working approach did.  We run PowerShell fully hidden via CREATE_NO_WINDOW.
+
+
+def _ps_connect(mac: str) -> None:
+    """Re-enable the Bluetooth device in Device Manager (initiates connection)."""
+    mac_under = mac.upper().replace(":", "_").replace("-", "_")
+    mac_plain = mac.upper().replace(":", "").replace("-", "")
+    script = (
+        f"$devs = Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue | "
+        f"Where-Object {{ $_.InstanceId -match '{mac_under}|{mac_plain}' }}; "
+        f"if (-not $devs) {{ exit 1 }}; "
+        f"$devs | ForEach-Object {{ Enable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false -ErrorAction SilentlyContinue }}; "
+        f"exit 0"
+    )
+    result = _run_ps(script)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"PowerShell connect failed (rc={result.returncode}): {result.stderr.strip()[:300]}"
+        )
+
+
+def _ps_disconnect(mac: str) -> None:
+    """Disable the Bluetooth device in Device Manager (triggers disconnect)."""
+    mac_under = mac.upper().replace(":", "_").replace("-", "_")
+    mac_plain = mac.upper().replace(":", "").replace("-", "")
+    script = (
+        f"$devs = Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue | "
+        f"Where-Object {{ $_.InstanceId -match '{mac_under}|{mac_plain}' }}; "
+        f"if (-not $devs) {{ exit 1 }}; "
+        f"$devs | ForEach-Object {{ Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false -ErrorAction SilentlyContinue }}; "
+        f"exit 0"
+    )
+    result = _run_ps(script)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"PowerShell disconnect failed (rc={result.returncode}): {result.stderr.strip()[:300]}"
+        )
+
+
+def _effective_mac(name: str, mac: str) -> str:
+    """Return MAC as a colon-separated string, resolving by name if needed."""
+    if mac and mac not in ("", "AA:BB:CC:DD:EE:FF"):
+        return mac
+    for d in list_paired_devices():
+        if name.lower() in (d["name"] or "").lower() and d["mac"]:
+            return d["mac"]
+    raise RuntimeError(f"Could not find MAC address for device '{name}'")
+
+
+# ---------------------------------------------------------------------------
+# PowerShell runner (shared by connect/disconnect/list)
 # ---------------------------------------------------------------------------
 
 
@@ -305,11 +367,11 @@ def connect(config) -> bool:
     for attempt in range(retry_count + 1):
         try:
             if method == "powershell":
-                _win32_connect(_resolve_mac(name, mac))
+                _ps_connect(_effective_mac(name, mac))
             elif method == "btcom":
-                _btcom_connect(mac)
+                _btcom_connect(_effective_mac(name, mac))
             elif method == "bleak":
-                _bleak_connect(mac)
+                _bleak_connect(_effective_mac(name, mac))
             else:
                 log.error("Unknown bt_method: %s", method)
                 return False
@@ -334,11 +396,11 @@ def disconnect(config) -> bool:
 
     try:
         if method == "powershell":
-            _win32_disconnect(_resolve_mac(name, mac))
+            _ps_disconnect(_effective_mac(name, mac))
         elif method == "btcom":
-            _btcom_disconnect(mac)
+            _btcom_disconnect(_effective_mac(name, mac))
         elif method == "bleak":
-            _bleak_disconnect(mac)
+            _bleak_disconnect(_effective_mac(name, mac))
         else:
             log.error("Unknown bt_method: %s", method)
             return False
@@ -361,9 +423,9 @@ def is_connected(config) -> bool:
         if method == "powershell":
             return _win32_is_connected(_resolve_mac(name, mac))
         elif method == "btcom":
-            return _btcom_is_connected(mac)
+            return _btcom_is_connected(_effective_mac(name, mac))
         elif method == "bleak":
-            return _bleak_is_connected(mac)
+            return _bleak_is_connected(_effective_mac(name, mac))
         else:
             return False
     except Exception as exc:
@@ -426,5 +488,5 @@ Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, Status, InstanceId 
         return devices
 
     except Exception as exc:
-        log.warning("list_paired_devices failed: %s", exc)
+        log.warning("list_paired_devices failed — could not query paired devices: %s", exc)
         return []

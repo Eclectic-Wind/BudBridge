@@ -98,10 +98,12 @@ def _load_or_generate_icon(state: str):
 # ---------------------------------------------------------------------------
 
 _TOOLTIP_TEMPLATES = {
-    "connected": "BudBridge — {device} on PC",
-    "disconnected": "BudBridge — {device} on Phone",
-    "busy": "BudBridge — Handoff in progress…",
-    "error": "BudBridge — Error (click to retry)",
+    "connected":        "BudBridge — {device} connected to PC",
+    "disconnected":     "BudBridge — {device} on phone",
+    "busy_claiming":    "BudBridge — Claiming {device} to PC…",
+    "busy_releasing":   "BudBridge — Releasing {device} to phone…",
+    "busy":             "BudBridge — Handoff in progress…",
+    "error":            "BudBridge — Connection failed (click to retry)",
 }
 
 
@@ -128,6 +130,8 @@ class TrayApp:
     def _build_menu(self):
         import pystray
 
+        from budbridge import startup
+
         return pystray.Menu(
             pystray.MenuItem(
                 "Claim to PC",
@@ -138,6 +142,12 @@ class TrayApp:
             pystray.MenuItem(
                 "Release to Phone",
                 self._action_release,
+            ),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Run at startup",
+                self._action_toggle_startup,
+                checked=lambda item: startup.is_enabled(),
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
@@ -194,6 +204,16 @@ class TrayApp:
         t = threading.Thread(target=self._open_settings_window, name="Settings", daemon=True)
         t.start()
 
+    def _action_toggle_startup(self, icon=None, item=None) -> None:
+        from budbridge import startup
+        try:
+            if startup.is_enabled():
+                startup.disable()
+            else:
+                startup.enable()
+        except Exception as exc:
+            log.error("Failed to toggle startup: %s", exc)
+
     def _action_quit(self, icon=None, item=None) -> None:
         if self._icon:
             self._icon.stop()
@@ -204,7 +224,7 @@ class TrayApp:
         try:
             import tkinter as tk
             from tkinter import ttk, messagebox
-            from budbridge.config import save as save_config
+            from budbridge.config import save as save_config, is_valid_mac
 
             cfg = self._config
             root = tk.Tk()
@@ -255,17 +275,23 @@ class TrayApp:
 
             ttk.Label(frame, text="BT Method:").grid(row=10, column=0, sticky="w")
             method_var = tk.StringVar(value=cfg.behavior.bt_method)
+            method_frame = ttk.Frame(frame)
+            method_frame.grid(row=10, column=1, sticky="w")
             ttk.Combobox(
-                frame,
+                method_frame,
                 textvariable=method_var,
                 values=["powershell", "btcom", "bleak"],
                 state="readonly",
                 width=14,
-            ).grid(row=10, column=1, sticky="w")
+            ).pack(side="left")
+            ttk.Label(method_frame, text=" (restart required)", foreground="grey").pack(side="left")
 
             ttk.Label(frame, text="Hotkey:").grid(row=11, column=0, sticky="w")
             hotkey_var = tk.StringVar(value=cfg.ui.hotkey)
-            ttk.Entry(frame, textvariable=hotkey_var, width=16).grid(row=11, column=1, sticky="w")
+            hotkey_frame = ttk.Frame(frame)
+            hotkey_frame.grid(row=11, column=1, sticky="w")
+            ttk.Entry(hotkey_frame, textvariable=hotkey_var, width=16).pack(side="left")
+            ttk.Label(hotkey_frame, text=" (restart required)", foreground="grey").pack(side="left")
 
             show_notif_var = tk.BooleanVar(value=cfg.ui.show_notifications)
             ttk.Checkbutton(
@@ -275,14 +301,22 @@ class TrayApp:
             ttk.Separator(frame).grid(row=13, column=0, columnspan=2, sticky="ew", pady=8)
 
             def _save():
-                cfg.device.bt_mac = mac_var.get().strip()
+                mac = mac_var.get().strip()
+                if mac and not is_valid_mac(mac):
+                    messagebox.showerror("Invalid", "Bluetooth MAC must be in the format AA:BB:CC:DD:EE:FF.")
+                    return
+                cfg.device.bt_mac = mac
                 cfg.device.bt_friendly_name = name_var.get().strip()
                 cfg.network.phone_ip = phone_ip_var.get().strip()
                 try:
-                    cfg.network.phone_port = int(phone_port_var.get())
-                    cfg.network.pc_port = int(pc_port_var.get())
+                    phone_port = int(phone_port_var.get())
+                    pc_port = int(pc_port_var.get())
+                    if not (1 <= phone_port <= 65535) or not (1 <= pc_port <= 65535):
+                        raise ValueError
+                    cfg.network.phone_port = phone_port
+                    cfg.network.pc_port = pc_port
                 except ValueError:
-                    messagebox.showerror("Invalid", "Ports must be integers.")
+                    messagebox.showerror("Invalid", "Ports must be integers between 1 and 65535.")
                     return
                 cfg.behavior.bt_method = method_var.get()
                 cfg.ui.hotkey = hotkey_var.get().strip()
@@ -314,13 +348,13 @@ class TrayApp:
         """
         # Map handoff states to tray states
         _map = {
-            "idle": "disconnected",
-            "releasing": "busy",
-            "waiting": "busy",
-            "connecting": "busy",
-            "connected": "connected",
+            "idle":         "disconnected",
+            "releasing":    "busy_releasing",
+            "waiting":      "busy_claiming",
+            "connecting":   "busy_claiming",
+            "connected":    "connected",
             "disconnected": "disconnected",
-            "error": "error",
+            "error":        "error",
         }
         tray_state = _map.get(state, state)
         self._state = tray_state
@@ -328,8 +362,10 @@ class TrayApp:
         if self._icon is None:
             return
 
+        # Directional busy states share the "busy" icon
+        icon_state = "busy" if tray_state in ("busy_claiming", "busy_releasing") else tray_state
         try:
-            self._icon.icon = _load_or_generate_icon(tray_state)
+            self._icon.icon = _load_or_generate_icon(icon_state)
             self._icon.title = self._make_tooltip()
         except Exception as exc:
             log.debug("set_state update error: %s", exc)

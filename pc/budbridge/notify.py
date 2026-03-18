@@ -52,8 +52,9 @@ def notify_released(device_name: str, enabled: bool = True) -> None:
 
 def notify_phone_unreachable(enabled: bool = True) -> None:
     notify(
-        "BudBridge — Warning",
-        "Could not reach your phone. Attempting BT connect anyway…",
+        "BudBridge — Phone Unreachable",
+        "Could not reach your phone. If your headphones are still connected to it, "
+        "disconnect them manually first.",
         enabled,
     )
 

@@ -76,6 +76,11 @@ class HotkeyManager:
         """Start the hotkey listener in a background daemon thread."""
         self._listener = self._build_listener()
         if self._listener is None:
+            log.error(
+                "Hotkey '%s' could not be registered — hotkey is disabled. "
+                "Check that pynput is installed and the hotkey string is valid.",
+                self._hotkey_str,
+            )
             return
 
         def _run():

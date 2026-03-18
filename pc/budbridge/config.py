@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
+
+_MAC_RE = re.compile(r"^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$")
+
+
+def is_valid_mac(mac: str) -> bool:
+    """Return True if *mac* looks like a valid Bluetooth MAC address."""
+    return bool(_MAC_RE.match(mac.strip()))
 
 try:
     import toml

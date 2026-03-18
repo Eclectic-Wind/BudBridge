@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 # Local imports
 # ---------------------------------------------------------------------------
 
-from budbridge.config import load as load_config, save as save_config, BudBridgeConfig
+from budbridge.config import load as load_config, save as save_config, BudBridgeConfig, is_valid_mac
 from budbridge.handoff import HandoffManager
 from budbridge.hotkey import HotkeyManager
 from budbridge.server import start_server, stop_server
@@ -85,22 +85,26 @@ def run_setup_wizard(config: BudBridgeConfig) -> None:
         refresh_btn.config(state="disabled")
 
         def _run():
+            error_msg = None
             try:
                 devs = bluetooth.list_paired_devices()
             except Exception as exc:
                 devs = []
-                root.after(0, lambda: listbox.delete(0, "end") or listbox.insert("end", f"Error: {exc}"))
-                root.after(0, lambda: refresh_btn.config(state="normal"))
-                return
+                error_msg = str(exc)
 
             def _update():
                 listbox.delete(0, "end")
                 devices.clear()
-                for d in devs:
-                    status = "Connected" if d["connected"] else "Paired"
-                    label = f"{d['name']}  [{d.get('mac', 'N/A')}]  — {status}"
-                    listbox.insert("end", label)
-                    devices.append(d)
+                if error_msg:
+                    listbox.insert("end", f"Error querying devices: {error_msg}")
+                elif not devs:
+                    listbox.insert("end", "No paired Bluetooth devices found.")
+                else:
+                    for d in devs:
+                        status = "Connected" if d["connected"] else "Paired"
+                        label = f"{d['name']}  [{d.get('mac', 'N/A')}]  — {status}"
+                        listbox.insert("end", label)
+                        devices.append(d)
                 refresh_btn.config(state="normal")
 
             root.after(0, _update)
@@ -172,14 +176,23 @@ def run_setup_wizard(config: BudBridgeConfig) -> None:
                         ip = result
                         break
 
-            if ip:
-                config.network.phone_ip = ip
-                phone_ip_var.set(ip)
-                root.after(0, lambda: search_result_var.set(f"Found phone at {ip}!"))
-            else:
-                root.after(0, lambda: search_result_var.set(
-                    "Phone not found. Make sure the BudBridge app is open on your phone."
-                ))
+            def _update():
+                try:
+                    if ip:
+                        config.network.phone_ip = ip
+                        phone_ip_var.set(ip)
+                        search_result_var.set(f"Found phone at {ip}!")
+                    else:
+                        search_result_var.set(
+                            "Phone not found. Make sure the BudBridge app is open on your phone."
+                        )
+                except Exception:
+                    pass  # Window was closed before search completed
+
+            try:
+                root.after(0, _update)
+            except Exception:
+                pass
 
         threading.Thread(target=_run, name="PhoneSearch", daemon=True).start()
 
@@ -223,13 +236,20 @@ def run_setup_wizard(config: BudBridgeConfig) -> None:
     notebook.bind("<<NotebookTabChanged>>", _update_summary)
 
     def _save():
-        config.device.bt_mac = mac_var.get().strip()
+        mac = mac_var.get().strip()
+        if mac and not is_valid_mac(mac):
+            messagebox.showerror("Invalid", "Bluetooth MAC must be in the format AA:BB:CC:DD:EE:FF.")
+            return
+        config.device.bt_mac = mac
         config.device.bt_friendly_name = name_var.get().strip()
         config.network.phone_ip = phone_ip_var.get().strip()
         try:
-            config.network.pc_port = int(pc_port_var.get())
+            pc_port = int(pc_port_var.get())
+            if not (1 <= pc_port <= 65535):
+                raise ValueError
+            config.network.pc_port = pc_port
         except ValueError:
-            messagebox.showerror("Invalid", "PC Port must be an integer.")
+            messagebox.showerror("Invalid", "PC Port must be an integer between 1 and 65535.")
             return
         save_config(config)
         messagebox.showinfo("Done", "Configuration saved! BudBridge will now start.")
@@ -248,15 +268,21 @@ def start_status_poll(config: BudBridgeConfig, tray: TrayApp, handoff: "HandoffM
     """Poll BT connection status every 30 s and update the tray icon."""
 
     def _poll():
+        last_handoff_end = 0.0
         while True:
             time.sleep(30)
             try:
                 if handoff.in_progress:
+                    last_handoff_end = time.monotonic()
                     continue
                 connected = bluetooth.is_connected(config)
                 tray.set_state("connected" if connected else "disconnected")
+                # Auto-reconnect: skip if intentionally released, or within 60 s of a handoff
+                if not connected and not handoff.released_to_phone:
+                    if time.monotonic() - last_handoff_end > 60.0:
+                        bluetooth.connect(config)
             except Exception as exc:
-                log.debug("Status poll error: %s", exc)
+                log.warning("Status poll error: %s", exc)
 
     t = threading.Thread(target=_poll, name="StatusPoll", daemon=True)
     t.start()

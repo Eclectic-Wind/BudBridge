@@ -88,6 +88,7 @@ def start_server(config, handoff_fn: Callable) -> None:
     global _flask_app, _server_thread, _werkzeug_server, _shutdown_event
 
     _shutdown_event.clear()
+    _bind_ready = threading.Event()
 
     _flask_app = _make_app(config, handoff_fn)
 
@@ -98,13 +99,20 @@ def start_server(config, handoff_fn: Callable) -> None:
         try:
             srv = make_server("0.0.0.0", config.network.pc_port, _flask_app)
             _werkzeug_server = srv
+            _bind_ready.set()
             log.info("BudBridge HTTP server listening on port %d", config.network.pc_port)
             srv.serve_forever()
         except Exception as exc:
-            log.error("HTTP server error: %s", exc)
+            _bind_ready.set()  # unblock caller even on failure
+            log.error("HTTP server failed to start on port %d: %s", config.network.pc_port, exc)
 
     _server_thread = threading.Thread(target=_run, name="BudBridge-HTTP", daemon=True)
     _server_thread.start()
+
+    if not _bind_ready.wait(timeout=3.0):
+        log.warning("HTTP server did not confirm startup within 3 s — it may not be running.")
+    elif _werkzeug_server is None:
+        log.warning("HTTP server failed to bind to port %d.", config.network.pc_port)
 
 
 def stop_server() -> None:
