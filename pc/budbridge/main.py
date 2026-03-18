@@ -256,13 +256,29 @@ def main() -> None:
     if not config.is_configured():
         log.info("First run — launching setup wizard.")
         run_setup_wizard(config)
-        # Reload after wizard
         config = load_config()
         if not config.is_configured():
-            log.warning("Setup wizard closed without saving. Running with defaults.")
+            import tkinter as tk
+            from tkinter import messagebox
+            _r = tk.Tk()
+            _r.withdraw()
+            again = messagebox.askyesno(
+                "BudBridge — Setup Required",
+                "BudBridge needs to be configured before it can work.\n\nOpen setup wizard?",
+            )
+            _r.destroy()
+            if not again:
+                log.warning("Setup aborted by user — exiting.")
+                return
+            run_setup_wizard(config)
+            config = load_config()
+            if not config.is_configured():
+                log.warning("Setup wizard closed without saving — exiting.")
+                return
 
     handoff = HandoffManager(config)
     tray = TrayApp(config, handoff)
+    tray.set_wizard_callback(lambda: run_setup_wizard(config))
     hotkey = HotkeyManager(config.ui.hotkey, handoff.claim_to_pc)
     discovery = DiscoveryService(config)
 

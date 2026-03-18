@@ -114,7 +114,12 @@ class TrayApp:
         self._icon = None
         self._state = "disconnected"
         self._settings_open = False
+        self._wizard_open = False
+        self._wizard_fn: Optional[Callable] = None
         self._on_quit: Optional[Callable] = None
+
+    def set_wizard_callback(self, fn: Callable) -> None:
+        self._wizard_fn = fn
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -135,6 +140,10 @@ class TrayApp:
                 self._action_release,
             ),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "Setup Wizard…",
+                self._action_wizard,
+            ),
             pystray.MenuItem(
                 "Settings…",
                 self._action_settings,
@@ -165,6 +174,19 @@ class TrayApp:
             target=self._handoff.release_to_phone, name="ReleaseToPhone", daemon=True
         )
         t.start()
+
+    def _action_wizard(self, icon=None, item=None) -> None:
+        if self._wizard_open or self._wizard_fn is None:
+            return
+        self._wizard_open = True
+        def _run():
+            try:
+                self._wizard_fn()
+            except Exception as exc:
+                log.error("Setup wizard error: %s", exc)
+            finally:
+                self._wizard_open = False
+        threading.Thread(target=_run, name="SetupWizard", daemon=True).start()
 
     def _action_settings(self, icon=None, item=None) -> None:
         if self._settings_open:
