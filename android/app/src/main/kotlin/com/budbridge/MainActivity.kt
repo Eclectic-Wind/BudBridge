@@ -173,6 +173,9 @@ class MainActivity : AppCompatActivity() {
         binding.tvStatusDevice.text = btDeviceName
         binding.tvStatusPc.text = if (pcIp.isEmpty()) "Not discovered yet" else pcIp
 
+        // Ensure the background service (and HTTP server) is always running when the app is open
+        BudBridgeService.start(this)
+
         binding.btnClaimNow.setOnClickListener {
             BudBridgeService.start(this)
             val intent = android.content.Intent(this, BudBridgeService::class.java).apply {

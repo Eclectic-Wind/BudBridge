@@ -171,9 +171,14 @@ def _win32_is_connected(mac_int: int) -> bool:
 # ---------------------------------------------------------------------------
 
 
+_PS_PATH = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+
 def _run_ps(script: str, timeout: int = 30) -> subprocess.CompletedProcess:
+    # Use full path so it works in no-console PyInstaller builds where PATH may be minimal
+    exe = _PS_PATH if __import__("os").path.exists(_PS_PATH) else "powershell"
     return subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+        [exe, "-NoProfile", "-NonInteractive", "-Command", script],
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -392,6 +397,7 @@ Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, Status, InstanceId 
             mac = ""
             parts = instance_id.upper().split("\\")
             for part in parts:
+                # Format 1: colon/underscore-separated AA_BB_CC_DD_EE_FF
                 candidate = part.replace("_", ":")
                 segments = candidate.split(":")
                 if len(segments) == 6 and all(len(s) == 2 for s in segments):
@@ -401,6 +407,14 @@ Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, Status, InstanceId 
                         break
                     except ValueError:
                         pass
+                # Format 2: continuous 12-char hex e.g. "Dev_B8D74AE0D17F" or
+                # embedded in "8&1EAAE2C7&0&B8D74AE0D17F" — split on _ and &
+                for subpart in part.replace("&", "_").split("_"):
+                    if len(subpart) == 12 and all(c in "0123456789ABCDEF" for c in subpart):
+                        mac = ":".join(subpart[i:i+2] for i in range(0, 12, 2))
+                        break
+                if mac:
+                    break
 
             devices.append({
                 "name": name,

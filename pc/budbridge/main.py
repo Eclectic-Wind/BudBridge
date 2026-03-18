@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import sys
 import threading
@@ -141,10 +142,10 @@ def run_setup_wizard(config: BudBridgeConfig) -> None:
         frame2,
         text=(
             "BudBridge will automatically find your phone over WiFi.\n\n"
-            "Make sure the BudBridge app is running on your phone and\n"
-            "both devices are on the same WiFi network.\n\n"
-            "Click 'Search Now' to scan, or skip — discovery happens\n"
-            "automatically in the background at handoff time."
+            "Before clicking Search Now:\n"
+            "  1. Open the BudBridge app on your phone\n"
+            "  2. Make sure both devices are on the same WiFi network\n\n"
+            "Or skip — discovery happens automatically at handoff time."
         ),
         justify="left",
     ).pack(anchor="w", pady=(0, 12))
@@ -153,16 +154,34 @@ def run_setup_wizard(config: BudBridgeConfig) -> None:
     ttk.Label(frame2, textvariable=search_result_var, foreground="grey").pack(anchor="w", pady=4)
 
     def _search_phone():
-        search_result_var.set("Searching for phone (5 s)…")
+        search_result_var.set("Searching… (up to 8 s)")
         root.update()
-        from budbridge.discovery import DiscoveryService
-        ds = DiscoveryService(config)
-        ip = ds.find_phone(timeout=5.0)
-        if ip:
-            config.network.phone_ip = ip
-            search_result_var.set(f"Found phone at {ip}!")
-        else:
-            search_result_var.set("Phone not found. Make sure the BudBridge app is open on your phone.")
+
+        def _run():
+            from budbridge.discovery import DiscoveryService
+            ds = DiscoveryService(config)
+
+            # Try mDNS and subnet scan in parallel; take whichever finds first
+            ip = None
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                f_mdns = pool.submit(ds.find_phone, 8.0)
+                f_scan = pool.submit(ds.scan_for_phone, 8.0)
+                for future in concurrent.futures.as_completed([f_mdns, f_scan], timeout=9.0):
+                    result = future.result()
+                    if result:
+                        ip = result
+                        break
+
+            if ip:
+                config.network.phone_ip = ip
+                phone_ip_var.set(ip)
+                root.after(0, lambda: search_result_var.set(f"Found phone at {ip}!"))
+            else:
+                root.after(0, lambda: search_result_var.set(
+                    "Phone not found. Make sure the BudBridge app is open on your phone."
+                ))
+
+        threading.Thread(target=_run, name="PhoneSearch", daemon=True).start()
 
     ttk.Button(frame2, text="Search Now", command=_search_phone).pack(anchor="w")
 

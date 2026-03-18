@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import socket
 from typing import Optional
@@ -83,6 +84,39 @@ class DiscoveryService:
             self._zeroconf = None
             self._service_info = None
             self._started = False
+
+    def scan_for_phone(self, timeout: float = 5.0) -> Optional[str]:
+        """TCP-scan the local /24 subnet for the phone HTTP port.
+
+        Works even when mDNS multicast is blocked by the router or firewall.
+        Returns the first IP that has the phone port open, or None.
+        """
+        port = self._config.network.phone_port
+        local_ip = self._get_local_ip()
+        subnet = ".".join(local_ip.split(".")[:3])
+
+        def _probe(host: str) -> Optional[str]:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.5)
+                    if s.connect_ex((host, port)) == 0:
+                        return host
+            except OSError:
+                pass
+            return None
+
+        hosts = [f"{subnet}.{i}" for i in range(1, 255)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=64) as pool:
+            for result in concurrent.futures.as_completed(
+                {pool.submit(_probe, h): h for h in hosts}, timeout=timeout
+            ):
+                ip = result.result()
+                if ip and ip != local_ip:
+                    log.info("Phone found via subnet scan at %s", ip)
+                    return ip
+
+        log.debug("Subnet scan found no phone on %s.0/24 port %d", subnet, port)
+        return None
 
     def find_peer(self, timeout: float = 5.0) -> Optional[str]:
         """Browse for any BudBridge instance on the LAN (PC or phone).
