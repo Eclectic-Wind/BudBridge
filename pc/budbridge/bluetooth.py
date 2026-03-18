@@ -66,6 +66,10 @@ _HFP       = "{0000111E-0000-1000-8000-00805F9B34FB}"
 _dll_cache = None
 
 
+class _BT_FIND_RADIO_PARAMS(ctypes.Structure):
+    _fields_ = [("dwSize", ctypes.c_uint32)]
+
+
 def _dll() -> ctypes.WinDLL:
     global _dll_cache
     if _dll_cache is None:
@@ -82,8 +86,27 @@ def _dll() -> ctypes.WinDLL:
             ctypes.POINTER(_BT_DEVICE_INFO),
         ]
         dll.BluetoothGetDeviceInfo.restype = ctypes.c_uint32
+        dll.BluetoothFindFirstRadio.argtypes = [
+            ctypes.POINTER(_BT_FIND_RADIO_PARAMS),
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+        dll.BluetoothFindFirstRadio.restype = ctypes.c_void_p
+        dll.BluetoothFindRadioClose.argtypes = [ctypes.c_void_p]
+        dll.BluetoothFindRadioClose.restype = ctypes.c_bool
         _dll_cache = dll
     return _dll_cache
+
+
+def _get_radio() -> ctypes.c_void_p:
+    """Return the first available Bluetooth radio handle, or None."""
+    params = _BT_FIND_RADIO_PARAMS()
+    params.dwSize = ctypes.sizeof(_BT_FIND_RADIO_PARAMS)
+    radio = ctypes.c_void_p()
+    find_handle = _dll().BluetoothFindFirstRadio(ctypes.byref(params), ctypes.byref(radio))
+    if find_handle:
+        _dll().BluetoothFindRadioClose(find_handle)
+        return radio
+    return None
 
 
 def _new_dev(mac_int: int) -> _BT_DEVICE_INFO:
@@ -93,29 +116,53 @@ def _new_dev(mac_int: int) -> _BT_DEVICE_INFO:
     return dev
 
 
+def _populate_dev(dev: _BT_DEVICE_INFO, radio) -> None:
+    """Call BluetoothGetDeviceInfo to fill fRemembered, szName, etc. before SetServiceState."""
+    rc = _dll().BluetoothGetDeviceInfo(radio, ctypes.byref(dev))
+    if rc != 0:
+        log.warning("BluetoothGetDeviceInfo returned %d — struct may be incomplete", rc)
+
+
 def _win32_connect(mac_int: int) -> None:
-    dev  = _new_dev(mac_int)
+    radio = _get_radio()
+    dev = _new_dev(mac_int)
+    _populate_dev(dev, radio)
+
     a2dp = _make_guid(_A2DP_SINK)
     hfp  = _make_guid(_HFP)
-    r1 = _dll().BluetoothSetServiceState(None, ctypes.byref(dev), ctypes.byref(a2dp), 1)
-    r2 = _dll().BluetoothSetServiceState(None, ctypes.byref(dev), ctypes.byref(hfp),  1)
+    r1 = _dll().BluetoothSetServiceState(radio, ctypes.byref(dev), ctypes.byref(a2dp), 1)
+    r2 = _dll().BluetoothSetServiceState(radio, ctypes.byref(dev), ctypes.byref(hfp),  1)
+    log.info("BluetoothSetServiceState connect: A2DP=%d HFP=%d", r1, r2)
     if r1 != 0 and r2 != 0:
         raise RuntimeError(f"BluetoothSetServiceState connect failed: A2DP={r1} HFP={r2}")
 
+    # API is asynchronous — poll up to 5 s to confirm
+    for _ in range(10):
+        time.sleep(0.5)
+        if _win32_is_connected(mac_int):
+            log.info("Bluetooth connection confirmed.")
+            return
+    log.warning("SetServiceState returned success but device not yet showing connected.")
+
 
 def _win32_disconnect(mac_int: int) -> None:
-    dev  = _new_dev(mac_int)
+    radio = _get_radio()
+    dev = _new_dev(mac_int)
+    _populate_dev(dev, radio)
+
     a2dp = _make_guid(_A2DP_SINK)
     hfp  = _make_guid(_HFP)
-    r1 = _dll().BluetoothSetServiceState(None, ctypes.byref(dev), ctypes.byref(a2dp), 0)
-    r2 = _dll().BluetoothSetServiceState(None, ctypes.byref(dev), ctypes.byref(hfp),  0)
+    r1 = _dll().BluetoothSetServiceState(radio, ctypes.byref(dev), ctypes.byref(a2dp), 0)
+    r2 = _dll().BluetoothSetServiceState(radio, ctypes.byref(dev), ctypes.byref(hfp),  0)
+    log.info("BluetoothSetServiceState disconnect: A2DP=%d HFP=%d", r1, r2)
     if r1 != 0 and r2 != 0:
         raise RuntimeError(f"BluetoothSetServiceState disconnect failed: A2DP={r1} HFP={r2}")
 
 
 def _win32_is_connected(mac_int: int) -> bool:
+    radio = _get_radio()
     dev = _new_dev(mac_int)
-    rc = _dll().BluetoothGetDeviceInfo(None, ctypes.byref(dev))
+    rc = _dll().BluetoothGetDeviceInfo(radio, ctypes.byref(dev))
     return rc == 0 and bool(dev.fConnected)
 
 
